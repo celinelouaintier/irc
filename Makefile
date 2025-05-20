@@ -1,44 +1,58 @@
-NAME		:= ircserv
-CC			:= c++
-FLAGS		:= -Wall -Wextra -Werror -std=c++98 -I./includes
+NAME = ircserv
 
-SRCS_DIR	:= srcs/
-SRCS_FILE	:= main.cpp 
-SRCS		:= $(addprefix $(SRCS_DIR), $(SRCS_FILE))
+CPP = c++ 
 
-OBJS_DIR	:= objs/
-OBJS		:= $(addprefix $(OBJS_DIR), $(notdir $(SRCS:.cpp=.o)))
+CFLAGS = -Wall -Wextra -Werror -std=c++98
 
-$(OBJS_DIR)%.o: $(SRCS_DIR)%.cpp
-	@mkdir -p $(OBJS_DIR)
-	@ $(CC) $(FLAGS) -c $< -o $@
+SRC_DIR = ./srcs/
+	  
+SRC_FILES = main.cpp
 
-CLR_RMV		:= \033[0m
-RED			:= \033[1;31m
-GREEN		:= \033[1;32m
-YELLOW		:= \033[1;33m
-BLUE		:= \033[1;34m
-CYAN		:= \033[1;36m
-RM			:= rm -f
+SRC = $(addprefix $(SRC_DIR), $(SRC_FILES))
 
-${NAME}:	${OBJS}
-			@ echo "$(GREEN)Compilation ${CLR_RMV}of ${YELLOW}$(NAME) ${CLR_RMV}..."
-			@ ${CC} ${FLAGS} -o ${NAME} ${OBJS}
-			@ echo "$(GREEN)$(NAME) is ready ![0m ✔️"
+INC = -Iincludes/
 
-all:		${NAME}
+OBJ_DIR = .objs/
 
-bonus:		all
+OBJ = $(SRC:$(SRC_DIR)%.cpp=$(OBJ_DIR)%.o)
+
+RM = rm -rf
+
+all: $(NAME)
+
+$(NAME): $(OBJ)
+	if [ ! -f $(NAME) ] || [ `find $(OBJ) -newer $(NAME) | wc -l` -ne 0 ]; then \
+	$(CPP) $(CFLAGS) $(INC) $(OBJ) -o $(NAME); \
+		printf "$(ERASE)$(GREEN)👷 Program$(RESET) $(CYAN)$(BOLD)$(NAME)$(RESET) $(GREEN)created! 👷\n$(RESET)"; \
+	else \
+		printf "$(ERASE)$(YELLOW)No relink needed for$(RESET) $(CYAN)$(BOLD)$(NAME)\n$(RESET)"; \
+	fi \
+
+$(OBJ_DIR)%.o: $(SRC_DIR)%.cpp
+	mkdir -p $(@D)
+	${CPP} $(CFLAGS) $(INC) -c $< -o $@
+	printf "$(ERASE)$(BLUE) > Compilation: $(RESET) $<"
 
 clean:
-			@ ${RM} $(OBJS_DIR)/*.o
-			@ ${RM} -rf $(OBJS_DIR)
-			@ echo "$(RED)Deleting $(CYAN)$(NAME) $(CLR_RMV)objs ✔️"
+	$(RM) $(OBJ_DIR)
 
-fclean:		clean
-			@ ${RM} ${NAME}
-			@ echo "$(RED)Deleting $(CYAN)$(NAME) $(CLR_RMV)binary ✔️"
+fclean: clean
+	printf "$(ERASE)$(GREEN)Fcleaning up...$(RESET)"
+	$(RM) ${NAME}
+	printf "$(ERASE)🧼 $(GREEN)Fclean finished! 🧼\n$(RESET)"
 
-re:			fclean all
+re: fclean all
 
-.PHONY:		all clean fclean re
+.PHONY: all clean fclean re 
+.SILENT:
+
+# COLORS
+RED = \033[31m
+GREEN = \033[32m
+YELLOW = \033[33m
+BLUE = \033[34m
+MAGENTA = \033[35m
+CYAN = \033[36m
+BOLD = \033[1m
+ERASE = \033[2K\r
+RESET = \033[0m

@@ -5,5 +5,6 @@ int main(int ac, char **av) {
 		std::cerr << "Usage: " << av[0] << " <port> <password>" << std::endl;
 		return -1;
 	}
+	std::cout << "tg Naim" << std::endl;
 	return 0;
 }
