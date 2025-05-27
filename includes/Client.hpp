@@ -9,11 +9,18 @@ class Client
     public:
 
         Client();
+		Client(int fd);
         Client(Client const &src);
 
         virtual ~Client();
 
         Client &operator=(Client const &rhs);
+
+		// Getters
+		bool getIsRegistered() const { return _isRegistered; }
+
+		// Setters
+		void setIsRegistered(bool isRegistered) { _isRegistered = isRegistered; }
 
     private:
 

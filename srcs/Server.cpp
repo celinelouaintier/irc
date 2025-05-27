@@ -15,6 +15,11 @@ Server::~Server()
 
 }
 
+bool starts_with(const std::string& str, const std::string& prefix) {
+    return str.size() >= prefix.size() &&
+           str.compare(0, prefix.size(), prefix) == 0;
+}
+
 Server &Server::operator=(Server const &rhs)
 {
     if (this != &rhs)
@@ -96,7 +101,9 @@ void Server::handleNewConnection()
 	}
 
 	_clientFds.push_back(clientFd);
+	_clientMap[clientFd] = Client(clientFd);
 	std::cout << "Client connected" << std::endl;
+	send(clientFd, "Please enter the password with \"PASS <password>\": \n", 52, 0);
 }
 
 void Server::handleClientMessage(int fd)
@@ -112,18 +119,35 @@ void Server::handleClientMessage(int fd)
 		std::cerr << "Error receiving data" << std::endl;
 		deleteClient(fd);
 	}
-	else {
+	else if (starts_with(buffer, "PASS ")) {
+		buffer[bytes - 1] = '\0';
+		std::string password(buffer + 5);
+		if (password == _password) {
+			std::cout << "Password accepted" << std::endl;
+			send(fd, "Welcome to the server!\n", 24, 0);
+			_clientMap[fd].setIsRegistered(true);
+		} else {
+			std::cerr << "Incorrect password" << std::endl;
+			send(fd, "Incorrect password\n", 20, 0);
+		}
+	}
+	else if (_clientMap[fd].getIsRegistered()){
 		buffer[bytes] = '\0';
 		std::cout << "Message sent" << std::endl;
 		for (size_t c = 0; c < _clientFds.size(); c++)
-			if (_clientFds[c] != fd)
+			if (_clientFds[c] != fd && _clientMap[_clientFds[c]].getIsRegistered())
 				send(_clientFds[c], buffer, bytes, 0);
+	}
+	else {
+		std::cerr << "Client not registered" << std::endl;
+		send(fd, "You must register first\n", 24, 0);
 	}
 }
 
 void Server::deleteClient(int fd)
 {
 	_clientFds.erase(std::remove(_clientFds.begin(), _clientFds.end(), fd), _clientFds.end());
+	_clientMap.erase(fd);
 	close(fd);
 	epoll_ctl(_epollFd, EPOLL_CTL_DEL, fd, NULL);
 }

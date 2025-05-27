@@ -12,6 +12,7 @@
 #include <sys/epoll.h>
 #include <vector>
 #include <algorithm>
+#include <map>
 
 #include "Client.hpp"
 
@@ -82,4 +83,5 @@ class Server
         std::string _password;
         std::vector<int> _clientFds;
 		std::vector<Client> _clients;
+		std::map<int, Client> _clientMap;
 };
