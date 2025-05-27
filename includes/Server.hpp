@@ -11,6 +11,9 @@
 #include <netinet/in.h>
 #include <sys/epoll.h>
 #include <vector>
+#include <algorithm>
+
+#include "Client.hpp"
 
 class Server
 {
@@ -19,9 +22,12 @@ class Server
         Server();
         virtual ~Server();
 
+		Server(Server const &src);
+		Server &operator=(Server const &rhs);
+
         //epoll
         void init(int port, const std::string &password);
-        void run(int port, const std::string &password);
+        void run();
         void shutdown();
 
         void defineNickname(int clientFd, const std::string &nickname);
@@ -29,19 +35,51 @@ class Server
         void joinChannel(int clientFd, const std::string &channel);
         void sendMessage(int clientFd, const std::string &message);
 
-
         void kickClient(int clientFd);
         void inviteClient(int clientFd, const std::string &channel);
         void topicChannel(int clientFd, const std::string &channel, const std::string &topic);
         void setMode(int clientFd, const std::string &mode);
 
-    private:
+		void deleteClient(int clientFd);
+		void handleNewConnection();
+		void handleClientMessage(int clientFd);
 
-        bool _isAdmin;
-        // tout ce qu'il y a dans le main pour le moment
+		//Exceptions
+		class CreateSocketException : public std::exception
+		{
+			public:
+				virtual const char* what() const throw();
+		};
+
+		class BindingSocketException : public std::exception
+		{
+			public:
+				virtual const char* what() const throw();
+		};
+
+		class listeningSocketException : public std::exception
+		{
+			public:
+				virtual const char* what() const throw();
+		};
+
+		class CreateEpollException : public std::exception
+		{
+			public:
+				virtual const char* what() const throw();
+		};
+
+		class EpollWaitException : public std::exception
+		{
+			public:
+				virtual const char* what() const throw();
+		};
+
+    private:
         int _epollFd;
-        std::vector<int> _clientFds;
-        std::string _password;
-        struct sockaddr_in _serverAddr;
         int _serverFd;
+        struct sockaddr_in _serverAddr;
+        std::string _password;
+        std::vector<int> _clientFds;
+		std::vector<Client> _clients;
 };
