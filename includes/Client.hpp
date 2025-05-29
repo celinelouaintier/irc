@@ -18,20 +18,24 @@ class Client
 
 		// Getters
 		bool getIsRegistered() const { return _isRegistered; }
+        std::string getNickname() const { return _nickname; }
+        std::string getUsername() const { return _username; }
 
 		// Setters
 		void setIsRegistered(bool isRegistered) { _isRegistered = isRegistered; }
+        void setNickname(const std::string &nickname) { _nickname = nickname; }
+        void setUsername(const std::string &username) { _username = username; }
+
 
     private:
 
         int _fd;
+        bool _isRegistered;
         std::string _nickname;
         std::string _username;
         std::string _realname;
         std::string _host;
         std::string _servername;
-        std::string _password;
         std::vector<std::string> _channels;
 
-        bool _isRegistered;
 };
