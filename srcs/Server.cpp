@@ -103,7 +103,6 @@ void Server::handleNewConnection()
 	_clientFds.push_back(clientFd);
 	_clientMap[clientFd] = Client(clientFd);
 	std::cout << "Client connected" << std::endl;
-	// send(clientFd, "Please enter the password with \"PASS <password>\": \n", 52, 0);
 }
 
 void Server::handleClientMessage(int fd)
