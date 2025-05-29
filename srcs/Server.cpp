@@ -127,6 +127,9 @@ void Server::handleClientMessage(int fd)
 		}
 		else if (starts_with(line, "CONNECT ") || starts_with(line, "JOIN "))
 			return;
+		else if (starts_with(line, "PING ")) {
+			send (fd, "PONG\r\n", 6, 0);
+		}
 		else if (starts_with(line, "CAP LS"))
 		{
 			std::string capReply = ":irc.42.local CAP * LS :\r\n";
@@ -138,8 +141,18 @@ void Server::handleClientMessage(int fd)
 			std::cout << password << " /////// " << _password << std::endl;
 			if (password == _password) {
 				std::cout << "Password accepted" << std::endl;
-				send(fd, "Welcome to the server!\n", 24, 0);
 				_clientMap[fd].setIsRegistered(true);
+				if (!_clientMap[fd].getNickname().empty() && !_clientMap[fd].getUsername().empty() && _clientMap[fd].getIsRegistered())
+				{
+					std::string tmp = ":localhost 001 " + _clientMap[fd].getNickname() + " :Welcome to the 42 IRC Server\r\n";
+					send(fd, tmp.c_str(), 60, 0);
+					tmp = ":localhost 002 " + _clientMap[fd].getNickname() + " :Your host is localhost, running version 0.1\r\n";
+					send(fd, tmp.c_str(), 60, 0);
+					tmp = ":localhost 003 " + _clientMap[fd].getNickname() + " :This server was created just now\r\n";
+					send(fd, tmp.c_str(), 60, 0);
+					tmp = ":localhost 004 " + _clientMap[fd].getNickname() + " :localhost 0.1\r\n";
+					send(fd, tmp.c_str(), 60, 0);
+				}
 			} else {
 				std::cerr << "Incorrect password" << std::endl;
 				send(fd, "Incorrect password\n", 20, 0);
@@ -149,16 +162,8 @@ void Server::handleClientMessage(int fd)
 		{
 			line[bytes - 1] = '\0';
 			std::string nickname(line.c_str() + 5);
-			// if (_clientMap[fd].getIsRegistered())
 			_clientMap[fd].setNickname(nickname);
 			std::cout << "Nickname set to: " << nickname << std::endl;
-		}
-		else if (starts_with(line, "USER ")) {
-			line[bytes - 1] = '\0';
-			std::string username(line.c_str() + 5);
-			// if (_clientMap[fd].getIsRegistered())
-			_clientMap[fd].setUsername(username);
-			std::cout << "Username set to: " << username << std::endl;
 			if (!_clientMap[fd].getNickname().empty() && !_clientMap[fd].getUsername().empty() && _clientMap[fd].getIsRegistered())
 			{
 				std::string tmp = ":localhost 001 " + _clientMap[fd].getNickname() + " :Welcome to the 42 IRC Server\r\n";
@@ -169,6 +174,23 @@ void Server::handleClientMessage(int fd)
 				send(fd, tmp.c_str(), 60, 0);
 				tmp = ":localhost 004 " + _clientMap[fd].getNickname() + " :localhost 0.1\r\n";
 				send(fd, tmp.c_str(), 60, 0);
+			}
+		}
+		else if (starts_with(line, "USER ")) {
+			line[bytes - 1] = '\0';
+			std::string username(line.c_str() + 5);
+			_clientMap[fd].setUsername(username);
+			std::cout << "Username set to: " << username << std::endl;
+			if (!_clientMap[fd].getNickname().empty() && !_clientMap[fd].getUsername().empty() && _clientMap[fd].getIsRegistered())
+			{
+				std::string tmp = ":localhost 001 " + _clientMap[fd].getNickname() + " :Welcome to the 42 IRC Server\r\n";
+				send(fd, tmp.c_str(), tmp.size(), 0);
+				tmp = ":localhost 002 " + _clientMap[fd].getNickname() + " :Your host is localhost, running version 0.1\r\n";
+				send(fd, tmp.c_str(), tmp.size(), 0);
+				tmp = ":localhost 003 " + _clientMap[fd].getNickname() + " :This server was created just now\r\n";
+				send(fd, tmp.c_str(), tmp.size(), 0);
+				tmp = ":localhost 004 " + _clientMap[fd].getNickname() + " :localhost 0.1\r\n";
+				send(fd, tmp.c_str(), tmp.size(), 0);
 			}
 		}
 		else if (_clientMap[fd].getIsRegistered()){
