@@ -13,8 +13,12 @@
 #include <vector>
 #include <algorithm>
 #include <map>
+#include <set>
 
 #include "Client.hpp"
+
+
+
 
 class Server
 {
@@ -77,6 +81,16 @@ class Server
 		};
 
     private:
+		typedef struct s_channel
+		{
+			std::string name; // Channel name #channelname
+			std::string topic; // #channelname : channel topic
+			std::set<int> members; // Set of client file descriptors (you can't have double with a set)
+			std::set<int> operators;
+			std::set<int> invitedUsers; // Users invited to the channel (en +i)
+			bool isInviteOnly; // If the channel is invite only
+		}			t_channel;
+
         int _epollFd;
         int _serverFd;
         struct sockaddr_in _serverAddr;
@@ -84,4 +98,5 @@ class Server
         std::vector<int> _clientFds;
 		std::vector<Client> _clients;
 		std::map<int, Client> _clientMap;
+		std::map<std::string, t_channel> _channels;
 };

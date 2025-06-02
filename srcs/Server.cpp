@@ -116,6 +116,7 @@ void Server::handleClientMessage(int fd)
 	while (std::getline(ss, line)) {
     	if (!line.empty() && line[line.size() - 1] == '\r')
 			line.erase(line.size() - 1);
+		// line[bytes - 1] = '\0';
 		std::cout << "Received: " << line << std::endl;
 		if (!bytes) {
 			std::cout << "Client disconnected " << std::endl;
@@ -125,8 +126,71 @@ void Server::handleClientMessage(int fd)
 			std::cerr << "Error receiving data" << std::endl;
 			deleteClient(fd);
 		}
-		else if (starts_with(line, "CONNECT ") || starts_with(line, "JOIN "))
-			return;
+		else if (starts_with(line, "CONNECT ") || starts_with(line, "JOIN :"))
+			continue;
+		else if (starts_with(line, "PRIVMSG "))
+		{
+			std::cout << "Here ! #1" << std::endl;
+			line[bytes - 1] = '\0';
+			std::string chamess = line.substr(8);
+			if (chamess.empty()) {
+				send(fd, "You must specify a message to send\n", 36, 0);
+				continue;
+			}
+			size_t chan_start = chamess.find('#') + 1;
+			size_t space = chamess.find(' ', chan_start);
+			if (chan_start == std::string::npos || space == std::string::npos)
+				continue;
+			std::string channel = chamess.substr(chan_start, space - chan_start);
+			if (channel.empty()) {
+				send(fd, "You must specify a channel to send the message to\n", 51, 0);
+				continue;
+			}
+			std::string message = chamess.substr(chamess.find(':') + 1);
+			if (message.empty()) {
+				send(fd, "You must specify a message to send\n", 36, 0);
+				continue;
+			}
+			std::cout << "Here ! #2" << std::endl;
+			std::cout << _channels[channel].members.size() << std::endl;
+			std::cout << channel << std::endl;
+			for (std::set<int>::iterator it = _channels[channel].members.begin(); it != _channels[channel].members.end(); ++it)
+			{
+				std::cout << "Here ! #3" << std::endl;
+				if (*it != fd)
+				{
+					std::cout << "Here ! #4" << std::endl;
+					std::string msg = ":" + _clientMap[fd].getNickname() + "!" + _clientMap[fd].getUser() + "@localhost PRIVMSG #" + channel + " :" + message + "\r\n";
+					std::cout << msg << std::endl;
+					if (send(*it, msg.c_str(), msg.size(), 0) < 0)
+						std::cerr << "Failed to send message to client " << *it << std::endl;
+					else
+						std::cout << "Message sent to client " << *it << std::endl;
+				}
+			}		
+		}
+		else if (starts_with(line, "JOIN ")) {
+			line[bytes - 1] = '\0';
+			std::string channel(line.c_str() + 6);
+			std::cout << channel << std::endl;
+			if (channel.empty()) {
+				send(fd, "You must specify a channel to join\n", 36, 0);
+				continue;
+			}
+			if (_channels.find(channel) == _channels.end()) {
+				_channels[channel] = t_channel();
+				_channels[channel].name = channel;
+				_channels[channel].members.insert(fd);
+				std::cout << _channels[channel].members.size() << std::endl;
+				_channels[channel].operators.insert(fd);
+				std::cout << "Channel " << channel << " created" << std::endl;
+			}
+			else {
+				_channels[channel].members.insert(fd);
+				std::cout << _channels[channel].members.size() << std::endl;
+				std::cout << "Client " << fd << " joined channel " << channel << std::endl;
+			}
+		}
 		else if (starts_with(line, "PING ")) {
 			send (fd, "PONG\r\n", 6, 0);
 		}
@@ -179,7 +243,9 @@ void Server::handleClientMessage(int fd)
 		else if (starts_with(line, "USER ")) {
 			line[bytes - 1] = '\0';
 			std::string username(line.c_str() + 5);
+			std::string user = username.substr(0, username.find(' '));
 			_clientMap[fd].setUsername(username);
+			_clientMap[fd].setUser(user);
 			std::cout << "Username set to: " << username << std::endl;
 			if (!_clientMap[fd].getNickname().empty() && !_clientMap[fd].getUsername().empty() && _clientMap[fd].getIsRegistered())
 			{
@@ -194,7 +260,7 @@ void Server::handleClientMessage(int fd)
 			}
 		}
 		else if (_clientMap[fd].getIsRegistered()){
-			line[bytes] = '\0';
+			line[bytes - 1] = '\0';
 			std::cout << "Message sent" << std::endl;
 			for (size_t c = 0; c < _clientFds.size(); c++)
 				if (_clientFds[c] != fd && _clientMap[_clientFds[c]].getIsRegistered())
