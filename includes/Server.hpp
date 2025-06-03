@@ -48,6 +48,7 @@ class Server
 		void deleteClient(int clientFd);
 		void handleNewConnection();
 		void handleClientMessage(int clientFd);
+		void registerClientAndSendWelcome(int fd);
 
 		//Exceptions
 		class CreateSocketException : public std::exception
