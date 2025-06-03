@@ -96,8 +96,6 @@ class Server
         int _serverFd;
         struct sockaddr_in _serverAddr;
         std::string _password;
-        std::vector<int> _clientFds;
-		std::vector<Client> _clients;
-		std::map<int, Client> _clientMap;
+		std::map<int, Client> _clients;
 		std::map<std::string, t_channel> _channels;
 };

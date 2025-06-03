@@ -27,7 +27,7 @@ Server &Server::operator=(Server const &rhs)
 		_serverFd = rhs._serverFd;
 		_epollFd = rhs._epollFd;
 		_serverAddr = rhs._serverAddr;
-		_clientFds = rhs._clientFds;
+		_clients = rhs._clients;
 		_password = rhs._password;
 	}
     return *this;
@@ -99,9 +99,7 @@ void Server::handleNewConnection()
 		close(clientFd);
 		return;
 	}
-
-	_clientFds.push_back(clientFd);
-	_clientMap[clientFd] = Client(clientFd);
+	_clients[clientFd] = Client(clientFd);
 	std::cout << "Client connected" << std::endl;
 }
 
@@ -142,7 +140,7 @@ void Server::handleClientMessage(int fd)
 		{
 			line[bytes - 1] = '\0';
 			std::string nickname(line.c_str() + 5);
-			_clientMap[fd].setNickname(nickname);
+			_clients[fd].setNickname(nickname);
 			std::cout << "Nickname set to: " << nickname << std::endl;
 			registerClientAndSendWelcome(fd);
 		}
@@ -150,12 +148,12 @@ void Server::handleClientMessage(int fd)
 			line[bytes - 1] = '\0';
 			std::string username(line.c_str() + 5);
 			std::string user = username.substr(0, username.find(' '));
-			_clientMap[fd].setUsername(username);
-			_clientMap[fd].setUser(user);
+			_clients[fd].setUsername(username);
+			_clients[fd].setUser(user);
 			std::cout << "Username set to: " << username << std::endl;
 			registerClientAndSendWelcome(fd);
 		}
-		else if (!_clientMap[fd].getIsRegistered()) {
+		else if (!_clients[fd].getIsRegistered()) {
 			std::cerr << "Client not registered" << std::endl;
 			send(fd, "You must register first\n", 24, 0);
 		}
@@ -177,6 +175,7 @@ void Server::handleClientMessage(int fd)
 				send(fd, "You must specify a message to send\n", 36, 0);
 				continue;
 			}
+			std::string msg = ":" + _clients[fd].getNickname() + "!" + _clients[fd].getUser() + "@localhost PRIVMSG " + dest + " :" + message + "\r\n";
 			for (std::set<int>::iterator it = _channels[dest].members.begin(); it != _channels[dest].members.end(); ++it)
 			{
 				if (*it != fd)
@@ -187,9 +186,8 @@ void Server::handleClientMessage(int fd)
 						std::cout << "Message sent to client " << *it << std::endl;
 				}
 			}
-			for (std::map<int, Client>::iterator it = _clientMap.begin(); it != _clientMap.end(); ++it)
+			for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it)
 			{
-				std::cout << "Here #3" << std::endl;
 				if (it->second.getNickname() == dest && it->second.getIsRegistered())
 				{
 					if (send(it->first, msg.c_str(), msg.size(), 0) < 0)
@@ -203,7 +201,6 @@ void Server::handleClientMessage(int fd)
 		else if (starts_with(line, "JOIN ")) {
 			line[bytes - 1] = '\0';
 			std::string channel(line.c_str() + 5);
-			std::cout << channel << std::endl;
 			if (channel.empty()) {
 				send(fd, "You must specify a channel to join\n", 36, 0);
 				continue;
@@ -212,13 +209,11 @@ void Server::handleClientMessage(int fd)
 				_channels[channel] = t_channel();
 				_channels[channel].name = channel;
 				_channels[channel].members.insert(fd);
-				std::cout << _channels[channel].members.size() << std::endl;
 				_channels[channel].operators.insert(fd);
 				std::cout << "Channel " << channel << " created" << std::endl;
 			}
 			else {
 				_channels[channel].members.insert(fd);
-				std::cout << _channels[channel].members.size() << std::endl;
 				std::cout << "Client " << fd << " joined channel " << channel << std::endl;
 			}
 		}
@@ -235,25 +230,24 @@ void Server::handleClientMessage(int fd)
 
 void Server::registerClientAndSendWelcome(int fd)
 {
-	if (!_clientMap[fd].getNickname().empty() && !_clientMap[fd].getUsername().empty())
+	if (!_clients[fd].getNickname().empty() && !_clients[fd].getUsername().empty() && !_clients[fd].getIsRegistered())
 	{
-		_clientMap[fd].setIsRegistered(true);
+		_clients[fd].setIsRegistered(true);
 		std::cout << "Client " << fd << " registered" << std::endl;
-		std::string tmp = ":localhost 001 " + _clientMap[fd].getNickname() + " :Welcome to the 42 IRC Server\r\n";
+		std::string tmp = ":localhost 001 " + _clients[fd].getNickname() + " :Welcome to the 42 IRC Server\r\n";
 		send(fd, tmp.c_str(), tmp.size(), 0);
-		tmp = ":localhost 002 " + _clientMap[fd].getNickname() + " :Your host is localhost, running version 0.1\r\n";
+		tmp = ":localhost 002 " + _clients[fd].getNickname() + " :Your host is localhost, running version 0.1\r\n";
 		send(fd, tmp.c_str(), tmp.size(), 0);
-		tmp = ":localhost 003 " + _clientMap[fd].getNickname() + " :This server was created just now\r\n";
+		tmp = ":localhost 003 " + _clients[fd].getNickname() + " :This server was created just now\r\n";
 		send(fd, tmp.c_str(), tmp.size(), 0);
-		tmp = ":localhost 004 " + _clientMap[fd].getNickname() + " :localhost 0.1\r\n";
+		tmp = ":localhost 004 " + _clients[fd].getNickname() + " :localhost 0.1\r\n";
 		send(fd, tmp.c_str(), tmp.size(), 0);
 	}
 }
 
 void Server::deleteClient(int fd)
 {
-	_clientFds.erase(std::remove(_clientFds.begin(), _clientFds.end(), fd), _clientFds.end());
-	_clientMap.erase(fd);
+	_clients.erase(fd);
 	close(fd);
 	epoll_ctl(_epollFd, EPOLL_CTL_DEL, fd, NULL);
 }
