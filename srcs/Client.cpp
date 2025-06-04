@@ -5,7 +5,7 @@ Client::Client()
 
 }
 
-Client::Client(int fd) : _fd(fd), _isRegistered(false), _nickname(""), _username("") 
+Client::Client(int fd) : _fd(fd), _isRegistered(false), _nickname(""), _username(""), _hostname("localhost")
 {
 
 }
@@ -28,8 +28,7 @@ Client &Client::operator=(Client const &rhs)
 		_nickname = rhs._nickname;
 		_username = rhs._username;
 		_realname = rhs._realname;
-		_host = rhs._host;
-		_servername = rhs._servername;
+		_hostname = rhs._hostname;
 		_channels = rhs._channels;
 		_isRegistered = rhs._isRegistered;
 	}
