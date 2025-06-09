@@ -1,15 +1,40 @@
 #pragma once
 
+#include <string>
+#include <vector>
+#include <iostream>
+
 class Client
 {
-public:
-    Client();
-    Client(Client const &src);
+	private:
 
-    virtual ~Client();
+		int _fd;
+		bool _isRegistered;
+		std::string _nickname;
+		std::string _username;
+		std::string _user;
+		std::string _realname;
+		std::string _host;
+		std::string _servername;
+		std::vector<std::string> _channels;
 
-    Client &operator=(Client const &rhs);
+	public:
 
-private:
+		Client();
+		Client(int fd);
+		Client(Client const &src);
 
+		virtual ~Client();
+
+		Client &operator=(Client const &rhs);
+
+		bool getIsRegistered() const { return _isRegistered; }
+		std::string getNickname() const { return _nickname; }
+		std::string getUsername() const { return _username; }
+		std::string getUser() const { return _user; }
+
+		void setIsRegistered(bool isRegistered) { _isRegistered = isRegistered; }
+		void setNickname(const std::string &nickname) { _nickname = nickname; }
+		void setUsername(const std::string &username) { _username = username; }
+		void setUser(const std::string &user) { _user = user; }
 };

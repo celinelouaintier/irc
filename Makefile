@@ -6,7 +6,7 @@ CFLAGS = -Wall -Wextra -Werror -std=c++98
 
 SRC_DIR = ./srcs/
 	  
-SRC_FILES = main.cpp
+SRC_FILES = main.cpp Server.cpp Client.cpp
 
 SRC = $(addprefix $(SRC_DIR), $(SRC_FILES))
 
