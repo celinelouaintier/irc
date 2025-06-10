@@ -1,5 +1,6 @@
 #pragma once
 
+#include <csignal>
 #include <iostream>
 #include <string>
 #include <cstring>
@@ -15,6 +16,19 @@
 #include <set>
 
 #include "Client.hpp"
+
+# define RED "\033[31m"
+# define GREEN "\033[32m"
+# define YELLOW "\033[33m"
+# define BLUE "\033[34m"
+# define MAGENTA "\033[35m"
+# define CYAN "\033[36m"
+# define GRAY "\033[90m"
+# define BOLD "\033[1m"
+# define UNDER "\033[4m"
+# define BLINK "\033[5m"
+# define ERASE = "\033[2K\r"
+# define RESET "\033[0m"
 
 class Server
 {
@@ -33,9 +47,7 @@ class Server
 		int _serverFd;
 		struct sockaddr_in _serverAddr;
 		std::string _password;
-		std::vector<int> _clientFds;
-		std::vector<Client> _clients;
-		std::map<int, Client> _clientMap;
+		std::map<int, *Client> _clientMap;
 		std::map<std::string, t_channel> _channels;
 
 	public:
