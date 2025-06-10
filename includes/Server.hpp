@@ -33,6 +33,7 @@
 class Server
 {
 	private:
+
 		typedef struct s_channel
 		{
 			std::string name; 
@@ -47,35 +48,41 @@ class Server
 		int _serverFd;
 		struct sockaddr_in _serverAddr;
 		std::string _password;
-		std::map<int, *Client> _clientMap;
+		std::map<int, Client*> _clientMap;
 		std::map<std::string, t_channel> _channels;
+
+		Server(Server const &src);
+		Server &operator=(Server const &rhs);
+
+		void defineNickname(int fd, const std::string &nickname);
+		void defineUsername(int fd, const std::string &username);
+		void joinChannel(int fd, const std::string &channel);
+		void sendMessage(int fd, const std::string &message);
+
+		void kickClient(int fd);
+		void inviteClient(int fd, const std::string &channel);
+		void topicChannel(int fd, const std::string &channel, const std::string &topic);
+		void setMode(int fd, const std::string &mode);
+
+		void handleNewConnection();
+		void handleClientMessage(int fd);
+		void deleteClient(int fd);
+
+		void handlePrivateMessage(const std::string& line, int fd);
+		void handleJoinChannel(const std::string& line, int fd);
+		void handlePassword(const std::string& line, int fd);
+		void handleNickname(const std::string& line, int fd);
+		void handleUser(const std::string& line, int fd);
 
 	public:
 
 		Server();
-		Server(Server const &src);
-		Server &operator=(Server const &rhs);
 		virtual ~Server();
 
 		void init(int port, const std::string &password);
 		void run();
 		void shutdown();
-
-		void defineNickname(int clientFd, const std::string &nickname);
-		void defineUsername(int clientFd, const std::string &username);
-		void joinChannel(int clientFd, const std::string &channel);
-		void sendMessage(int clientFd, const std::string &message);
-
-		void kickClient(int clientFd);
-		void inviteClient(int clientFd, const std::string &channel);
-		void topicChannel(int clientFd, const std::string &channel, const std::string &topic);
-		void setMode(int clientFd, const std::string &mode);
-
-		void deleteClient(int clientFd);
-		void handleNewConnection();
-		void handleClientMessage(int clientFd);
-
-
+	
 		class CreateSocketException : public std::exception
 		{
 			public:

@@ -24,6 +24,7 @@ int main(int ac, char **av) {
 		Server server;
 		server.init(port, av[2]);
 		server.run();
+		server.shutdown();
 	} catch (const std::exception &e) {
 		std::cerr << "Error: " << e.what() << std::endl;
 		return -1;

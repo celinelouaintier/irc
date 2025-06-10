@@ -25,14 +25,7 @@ static bool starts_with(const std::string& str, const std::string& prefix) {
 
 Server &Server::operator=(Server const &rhs)
 {
-	if (this != &rhs)
-	{
-		_serverFd = rhs._serverFd;
-		_epollFd = rhs._epollFd;
-		_serverAddr = rhs._serverAddr;
-		_clientFds = rhs._clientFds;
-		_password = rhs._password;
-	}
+	(void)rhs;
 	return *this;
 }
 
@@ -76,7 +69,7 @@ void Server::run()
 
 		if (g_sig)
 		{
-			std::cerr << RED << "SIGINT detected, servers shutting down..." << RESET << std::endl;
+			std::cerr << YELLOW << "SIGINT detected, servers shutting down..." << RESET << std::endl;
 			break;
 		}
 
@@ -91,6 +84,18 @@ void Server::run()
 				handleClientMessage(fd);
 		}
 	}
+}
+
+void Server::shutdown()
+{
+	std::map<int, Client*>::iterator it = _clientMap.begin();
+	while (it != _clientMap.end())
+	{
+		close(it->first);
+		delete it->second;
+		it++;
+	}
+	std::cout << GREEN << "Server shut down. Thank you for having chosen our service. Have a nice day~" << RESET << std::endl;
 }
 
 void Server::handleNewConnection()
@@ -137,148 +142,40 @@ void Server::handleClientMessage(int fd)
 		if (!line.empty() && line[line.size() - 1] == '\r')
 			line.erase(line.size() - 1);
 		std::cout << "Received: " << line << std::endl;
+		line[bytes - 1] = '\0';
 		if (starts_with(line, "CONNECT ") || starts_with(line, "JOIN :"))
 			continue;
 		else if (starts_with(line, "PRIVMSG "))
-		{
-			std::cout << "Here ! #1" << std::endl;
-			line[bytes - 1] = '\0';
-			std::string chamess = line.substr(8);
-			if (chamess.empty()) {
-				send(fd, "You must specify a message to send\n", 36, 0);
-				continue;
-			}
-			size_t chan_start = chamess.find('#') + 1;
-			size_t space = chamess.find(' ', chan_start);
-			if (chan_start == std::string::npos || space == std::string::npos)
-				continue;
-			std::string channel = chamess.substr(chan_start, space - chan_start);
-			if (channel.empty()) {
-				send(fd, "You must specify a channel to send the message to\n", 51, 0);
-				continue;
-			}
-			std::string message = chamess.substr(chamess.find(':') + 1);
-			if (message.empty()) {
-				send(fd, "You must specify a message to send\n", 36, 0);
-				continue;
-			}
-			std::cout << "Here ! #2" << std::endl;
-			std::cout << _channels[channel].members.size() << std::endl;
-			std::cout << channel << std::endl;
-			for (std::set<int>::iterator it = _channels[channel].members.begin(); it != _channels[channel].members.end(); ++it)
-			{
-				std::cout << "Here ! #3" << std::endl;
-				if (*it != fd)
-				{
-					std::cout << "Here ! #4" << std::endl;
-					std::string msg = ":" + _clientMap[fd].getNickname() + "!" + _clientMap[fd].getUser() + "@localhost PRIVMSG #" + channel + " :" + message + "\r\n";
-					std::cout << msg << std::endl;
-					if (send(*it, msg.c_str(), msg.size(), 0) < 0)
-						std::cerr << "Failed to send message to client " << *it << std::endl;
-					else
-						std::cout << "Message sent to client " << *it << std::endl;
-				}
-			}
-		}
-		else if (starts_with(line, "JOIN ")) {
-			line[bytes - 1] = '\0';
-			std::string channel(line.c_str() + 6);
-			std::cout << channel << std::endl;
-			if (channel.empty()) {
-				send(fd, "You must specify a channel to join\n", 36, 0);
-				continue;
-			}
-			if (_channels.find(channel) == _channels.end()) {
-				_channels[channel] = t_channel();
-				_channels[channel].name = channel;
-				_channels[channel].members.insert(fd);
-				std::cout << _channels[channel].members.size() << std::endl;
-				_channels[channel].operators.insert(fd);
-				std::cout << "Channel " << channel << " created" << std::endl;
-			}
-			else {
-				_channels[channel].members.insert(fd);
-				std::cout << _channels[channel].members.size() << std::endl;
-				std::cout << "Client " << fd << " joined channel " << channel << std::endl;
-			}
-		}
-		else if (starts_with(line, "PING ")) {
+			handlePrivateMessage(line, fd);
+		else if (starts_with(line, "JOIN "))
+			handleJoinChannel(line, fd);
+		else if (starts_with(line, "PING "))
 			send (fd, "PONG\r\n", 6, 0);
-		}
 		else if (starts_with(line, "CAP LS"))
 		{
 			std::string capReply = ":irc.42.local CAP * LS :\r\n";
 			send(fd, capReply.c_str(), capReply.length(), 0);
 		}
-		else if (starts_with(line, "PASS ")) {
-			line[bytes - 1] = '\0';
-			std::string password(line.c_str() + 5);
-			std::cout << password << " /////// " << _password << std::endl;
-			if (password == _password) {
-				std::cout << "Password accepted" << std::endl;
-				_clientMap[fd].setIsRegistered(true);
-				if (!_clientMap[fd].getNickname().empty() && !_clientMap[fd].getUsername().empty() && _clientMap[fd].getIsRegistered())
-				{
-					std::string tmp = ":localhost 001 " + _clientMap[fd].getNickname() + " :Welcome to the 42 IRC Server\r\n";
-					send(fd, tmp.c_str(), 60, 0);
-					tmp = ":localhost 002 " + _clientMap[fd].getNickname() + " :Your host is localhost, running version 0.1\r\n";
-					send(fd, tmp.c_str(), 60, 0);
-					tmp = ":localhost 003 " + _clientMap[fd].getNickname() + " :This server was created just now\r\n";
-					send(fd, tmp.c_str(), 60, 0);
-					tmp = ":localhost 004 " + _clientMap[fd].getNickname() + " :localhost 0.1\r\n";
-					send(fd, tmp.c_str(), 60, 0);
-				}
-			} else {
-				std::cerr << "Incorrect password" << std::endl;
-				send(fd, "Incorrect password\n", 20, 0);
-			}
-		}
+		else if (starts_with(line, "PASS "))
+			handlePassword(line, fd);
 		else if (starts_with(line, "NICK "))
+			handleNickname(line, fd);
+		else if (starts_with(line, "USER "))
+			handleUser(line, fd);
+		else if (_clientMap[fd]->getIsRegistered())
 		{
-			line[bytes - 1] = '\0';
-			std::string nickname(line.c_str() + 5);
-			_clientMap[fd].setNickname(nickname);
-			std::cout << "Nickname set to: " << nickname << std::endl;
-			if (!_clientMap[fd].getNickname().empty() && !_clientMap[fd].getUsername().empty() && _clientMap[fd].getIsRegistered())
-			{
-				std::string tmp = ":localhost 001 " + _clientMap[fd].getNickname() + " :Welcome to the 42 IRC Server\r\n";
-				send(fd, tmp.c_str(), 60, 0);
-				tmp = ":localhost 002 " + _clientMap[fd].getNickname() + " :Your host is localhost, running version 0.1\r\n";
-				send(fd, tmp.c_str(), 60, 0);
-				tmp = ":localhost 003 " + _clientMap[fd].getNickname() + " :This server was created just now\r\n";
-				send(fd, tmp.c_str(), 60, 0);
-				tmp = ":localhost 004 " + _clientMap[fd].getNickname() + " :localhost 0.1\r\n";
-				send(fd, tmp.c_str(), 60, 0);
-			}
-		}
-		else if (starts_with(line, "USER ")) {
-			line[bytes - 1] = '\0';
-			std::string username(line.c_str() + 5);
-			std::string user = username.substr(0, username.find(' '));
-			_clientMap[fd].setUsername(username);
-			_clientMap[fd].setUser(user);
-			std::cout << "Username set to: " << username << std::endl;
-			if (!_clientMap[fd].getNickname().empty() && !_clientMap[fd].getUsername().empty() && _clientMap[fd].getIsRegistered())
-			{
-				std::string tmp = ":localhost 001 " + _clientMap[fd].getNickname() + " :Welcome to the 42 IRC Server\r\n";
-				send(fd, tmp.c_str(), tmp.size(), 0);
-				tmp = ":localhost 002 " + _clientMap[fd].getNickname() + " :Your host is localhost, running version 0.1\r\n";
-				send(fd, tmp.c_str(), tmp.size(), 0);
-				tmp = ":localhost 003 " + _clientMap[fd].getNickname() + " :This server was created just now\r\n";
-				send(fd, tmp.c_str(), tmp.size(), 0);
-				tmp = ":localhost 004 " + _clientMap[fd].getNickname() + " :localhost 0.1\r\n";
-				send(fd, tmp.c_str(), tmp.size(), 0);
-			}
-		}
-		else if (_clientMap[fd].getIsRegistered()){
-			line[bytes - 1] = '\0';
 			std::cout << "Message sent" << std::endl;
-			for (size_t c = 0; c < _clientFds.size(); c++)
-				if (_clientFds[c] != fd && _clientMap[_clientFds[c]].getIsRegistered())
-					send(_clientFds[c], line.c_str(), line.size(), 0);
+			std::map<int, Client*>::iterator it = _clientMap.begin();
+			while (it != _clientMap.end())
+			{
+				if (it->first != fd && it->second->getIsRegistered())
+					send(it->first, line.c_str(), line.size(), 0);
+				it++;
+			}
 		}
-		else {
-			std::cerr << "Client not registered" << std::endl;
+		else
+		{
+			std::cerr << RED << "Client not registered" << RESET << std::endl;
 			send(fd, "You must register first\n", 24, 0);
 		}
 	}
@@ -287,9 +184,135 @@ void Server::handleClientMessage(int fd)
 void Server::deleteClient(int fd)
 {
 	delete _clientMap[fd];
-	_clientMap.erase(fd);
 	close(fd);
+	_clientMap.erase(fd);
 	epoll_ctl(_epollFd, EPOLL_CTL_DEL, fd, NULL);
+}
+
+void Server::handlePrivateMessage(const std::string& line, int fd)
+{
+	std::cout << "Here ! #1" << std::endl;
+	std::string chamess = line.substr(8);
+	if (chamess.empty()) {
+		send(fd, "You must specify a message to send\n", 36, 0);
+		return;
+	}
+	size_t chan_start = chamess.find('#') + 1;
+	size_t space = chamess.find(' ', chan_start);
+	if (chan_start == std::string::npos || space == std::string::npos) return;
+	std::string channel = chamess.substr(chan_start, space - chan_start);
+	if (channel.empty()) {
+		send(fd, "You must specify a channel to send messages to\n", 51, 0);
+		return;
+	}
+	std::string message = chamess.substr(chamess.find(':') + 1);
+	if (message.empty()) {
+		send(fd, "You must specify a message to send\n", 36, 0);
+		return;
+	}
+	std::cout << "Here ! #2" << std::endl;
+	std::cout << _channels[channel].members.size() << std::endl;
+	std::cout << channel << std::endl;
+	for (std::set<int>::iterator it = _channels[channel].members.begin(); it != _channels[channel].members.end(); ++it)
+	{
+		std::cout << "Here ! #3" << std::endl;
+		if (*it != fd)
+		{
+			std::cout << "Here ! #4" << std::endl;
+			std::string msg = ":" + _clientMap[fd]->getNickname() + "!" + _clientMap[fd]->getUser() + "@localhost PRIVMSG #" + channel + " :" + message + "\r\n";
+			std::cout << msg << std::endl;
+			if (send(*it, msg.c_str(), msg.size(), 0) < 0)
+				std::cerr << "Failed to send message to client " << *it << std::endl;
+			else
+				std::cout << "Message sent to client " << *it << std::endl;
+		}
+	}
+}
+
+
+void Server::handleJoinChannel(const std::string& line, int fd)
+{
+	std::string channel(line.c_str() + 6);
+	std::cout << channel << std::endl;
+	if (channel.empty()) {
+		send(fd, "You must specify a channel to join\n", 36, 0);
+		return;
+	}
+	if (_channels.find(channel) == _channels.end())
+	{
+		_channels[channel] = t_channel();
+		_channels[channel].name = channel;
+		_channels[channel].members.insert(fd);
+		_channels[channel].operators.insert(fd);
+		std::cout << "Channel " << channel << " created" << std::endl;
+	}
+	else
+	{
+		_channels[channel].members.insert(fd);
+		std::cout << _channels[channel].members.size() << std::endl;
+		std::cout << "Client " << fd << " joined channel " << channel << std::endl;
+	}
+}
+
+void Server::handlePassword(const std::string& line, int fd)
+{
+	std::string password(line.c_str() + 5);
+	if (password == _password) {
+		std::cout << GREEN << "Password accepted" << RESET << std::endl;
+		_clientMap[fd]->setIsRegistered(true);
+		if (!_clientMap[fd]->getNickname().empty() && !_clientMap[fd]->getUsername().empty() && _clientMap[fd]->getIsRegistered())
+		{
+			std::string tmp = ":localhost 001 " + _clientMap[fd]->getNickname() + " :Welcome to the 42 IRC Server\r\n";
+			send(fd, tmp.c_str(), tmp.size(), 0);
+			tmp = ":localhost 002 " + _clientMap[fd]->getNickname() + " :Your host is localhost, running version 0.1\r\n";
+			send(fd, tmp.c_str(), tmp.size(), 0);
+			tmp = ":localhost 003 " + _clientMap[fd]->getNickname() + " :This server was created just now\r\n";
+			send(fd, tmp.c_str(), tmp.size(), 0);
+			tmp = ":localhost 004 " + _clientMap[fd]->getNickname() + " :localhost 0.1\r\n";
+			send(fd, tmp.c_str(), tmp.size(), 0);
+		}
+	}
+	else
+	{
+		std::cerr << RED << "Incorrect password" << RESET << std::endl;
+		send(fd, "Incorrect password\n", 20, 0);
+	}
+}
+
+void Server::handleNickname(const std::string& line, int fd)
+{
+	std::string nickname(line.c_str() + 5);
+	_clientMap[fd]->setNickname(nickname);
+	if (!_clientMap[fd]->getNickname().empty() && !_clientMap[fd]->getUsername().empty() && _clientMap[fd]->getIsRegistered())
+	{
+		std::string tmp = ":localhost 001 " + _clientMap[fd]->getNickname() + " :Welcome to the 42 IRC Server\r\n";
+		send(fd, tmp.c_str(), tmp.size(), 0);
+		tmp = ":localhost 002 " + _clientMap[fd]->getNickname() + " :Your host is localhost, running version 0.1\r\n";
+		send(fd, tmp.c_str(), tmp.size(), 0);
+		tmp = ":localhost 003 " + _clientMap[fd]->getNickname() + " :This server was created just now\r\n";
+		send(fd, tmp.c_str(), tmp.size(), 0);
+		tmp = ":localhost 004 " + _clientMap[fd]->getNickname() + " :localhost 0.1\r\n";
+		send(fd, tmp.c_str(), tmp.size(), 0);
+	}
+}
+
+void Server::handleUser(const std::string& line, int fd)
+{
+	std::string username(line.c_str() + 5);
+	std::string user = username.substr(0, username.find(' '));
+	_clientMap[fd]->setUsername(username);
+	_clientMap[fd]->setUser(user);
+	if (!_clientMap[fd]->getNickname().empty() && !_clientMap[fd]->getUsername().empty() && _clientMap[fd]->getIsRegistered())
+	{
+		std::string tmp = ":localhost 001 " + _clientMap[fd]->getNickname() + " :Welcome to the 42 IRC Server\r\n";
+		send(fd, tmp.c_str(), tmp.size(), 0);
+		tmp = ":localhost 002 " + _clientMap[fd]->getNickname() + " :Your host is localhost, running version 0.1\r\n";
+		send(fd, tmp.c_str(), tmp.size(), 0);
+		tmp = ":localhost 003 " + _clientMap[fd]->getNickname() + " :This server was created just now\r\n";
+		send(fd, tmp.c_str(), tmp.size(), 0);
+		tmp = ":localhost 004 " + _clientMap[fd]->getNickname() + " :localhost 0.1\r\n";
+		send(fd, tmp.c_str(), tmp.size(), 0);
+	}
 }
 
 const char* Server::CreateSocketException::what() const throw()
