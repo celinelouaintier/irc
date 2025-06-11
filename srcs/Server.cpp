@@ -138,6 +138,8 @@ void Server::handleClientMessage(int fd)
 	std::stringstream ss(data);
 	std::string line;
 
+	std::cout << MAGENTA << "A Request Recieved:" << RESET << std::endl;
+	std::cout << MAGENTA << data << RESET << std::endl;
 	while (std::getline(ss, line)) {
 		if (!line.empty() && line[line.size() - 1] == '\r')
 			line.erase(line.size() - 1);
