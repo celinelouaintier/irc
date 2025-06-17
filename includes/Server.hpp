@@ -118,5 +118,5 @@ class Server
 		void handlePassword(const std::string& line, int fd);
 		void handleNickname(const std::string& line, int fd);
 		void handleUser(const std::string& line, int fd);
-		void handleKickClient(const std::string& line, int fd);
+		void handleKickClient(std::string& line, int fd, int bytes);
 };

@@ -22,6 +22,7 @@ class Client
         std::string getUsername() const { return _username; }
         std::string getUser() const { return _user; }
 		std::string getHostname() const { return _hostname; }
+        std::vector<std::string> getChannels() const { return _channels; }
 
 		// Setters
 		void setIsRegistered(bool isRegistered) { _isRegistered = isRegistered; }

@@ -140,13 +140,11 @@ void Server::handleCommand(int fd)
 	std::string line;
 
 
-	std::cout << MAGENTA << "A Request Recieved:" << RESET << std::endl;
-	std::cout << MAGENTA << data << RESET << std::endl;
 	while (std::getline(ss, line)) {
     	if (!line.empty() && line[line.size() - 1] == '\r')
 			line.erase(line.size() - 1);
-		std::cout << "Received: " << line << std::endl;
-		line[bytes - 1] = '\0';
+		std::cout << MAGENTA << "A Request Received:" << RESET << std::endl;
+		std::cout << MAGENTA << line << RESET << std::endl;
 		if (!bytes) {
 			std::cout << "Client disconnected " << std::endl;
 			deleteClient(fd);
@@ -179,7 +177,7 @@ void Server::handleCommand(int fd)
 			send(fd, "You must register first\n", 24, 0);
 		}
 		else if (starts_with(line, "KICK "))
-			handleKickClient(line, fd);
+			handleKickClient(line, fd, bytes);
 		else if (starts_with(line, "PRIVMSG "))
 			handlePrivateMessage(line, fd);
 		else if (starts_with(line, "JOIN "))
@@ -187,11 +185,55 @@ void Server::handleCommand(int fd)
 		else if (starts_with(line, "PING ")) {
 			send (fd, "PONG\r\n", 6, 0);
 		}
+		else if (starts_with(line, "PART "))
+		{	
+			line[bytes - 1] = '\0';
+			std::string info = line.substr(5);
+			std::string message = "";
+			if (info.empty()) {
+				send(fd, "You must specify a channel and a nickname to kick\n", 50, 0);
+				return;
+			}
+			std::string channel = info.substr(0, info.find(' '));
+			if (_channels.find(channel) == _channels.end()) {
+				send(fd, "Channel does not exist\n", 23, 0);
+				return;
+			}
+			if (info.find(':') != std::string::npos)
+				message = info.substr(info.find(':') + 1);
+			std::string msg = ":" + _clients[fd].getNickname() + "!" + _clients[fd].getUser() + "@" + _clients[fd].getHostname() + " PART " + channel + " :" + message + "\r\n";
+			for (std::set<int>::iterator it = _channels[channel].members.begin(); it != _channels[channel].members.end(); ++it)
+			{
+				if (send(*it, msg.c_str(), msg.size(), 0) < 0)
+					std::cerr << RED << "Failed to send message to client " << *it << RESET << std::endl;
+				else
+					std::cout << "Message sent to client " << *it << std::endl;
+			}
+			std::cout << channel << std::endl;
+			_channels[channel].members.erase(fd);
+			if (_channels[channel].operators.find(fd) != _channels[channel].operators.end())
+				_channels[channel].operators.erase(fd);
+		}
+		else if (starts_with(line, "QUIT "))
+		{
+			for (std::map<std::string, t_channel>::iterator it = _channels.begin(); it != _channels.end(); ++it)
+			{
+				if (it->second.members.find(fd) != it->second.members.end())
+				{
+					it->second.members.erase(fd);
+					if (it->second.operators.find(fd) != it->second.operators.end())
+						it->second.operators.erase(fd);
+					std::cout << "Client " << fd << " removed from channel " << it->first << std::endl;
+				}
+			}
+			deleteClient(fd);
+		}
 	}
 }
 
-void Server::handleKickClient(const std::string& line, int fd)
+void Server::handleKickClient(std::string& line, int fd, int bytes)
 {
+	line[bytes - 1] = '\0';
 	std::string info = line.substr(5);
 	if (info.empty()) {
 		send(fd, "You must specify a channel and a nickname to kick\n", 50, 0);
@@ -265,7 +307,6 @@ void Server::handleUser(const std::string& line, int fd)
 	std::string user = username.substr(0, username.find(' '));
 	_clients[fd].setUsername(username);
 	_clients[fd].setUser(user);
-	std::cout << "Username set to: " << username << std::endl;
 	registerClientAndSendWelcome(fd);
 }
 
