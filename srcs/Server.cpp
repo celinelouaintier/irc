@@ -1,5 +1,13 @@
 #include "Server.hpp"
 
+volatile sig_atomic_t g_sig = 0;
+
+static void handle_sigint(int signal)
+{
+	(void)signal;
+	g_sig = 1;
+}
+
 Server::Server()
 {
 
@@ -64,11 +72,20 @@ void Server::run()
 
 	if (epoll_ctl(_epollFd, EPOLL_CTL_ADD, _serverFd, &serverEvent) == -1)
 		throw CreateEpollException();
+	signal(SIGINT, handle_sigint);
 
 	while(1)
 	{
 		struct epoll_event events[10];
 		int nfds = epoll_wait(_epollFd, events, 10, -1);
+
+		if (g_sig)
+		{
+
+			std::cerr << YELLOW << "\nSIGINT detected, servers shutting down..." << RESET << std::endl;
+			break;
+		}
+
 		if (nfds == -1)
 			throw EpollWaitException();
 
@@ -77,16 +94,27 @@ void Server::run()
 			if (fd == _serverFd)
 				handleNewConnection();
 			else
-				handleClientMessage(fd);
+				handleCommand(fd);
 		}
 	}
+}
+
+void Server::shutdown()
+{
+	std::map<int, Client>::iterator it = _clients.begin();
+	while (it != _clients.end())
+	{
+		deleteClient(it->first);
+		it++;
+	}
+	std::cout << GREEN << "Server shut down. Thank you for having chosen our service. Have a nice day~" << RESET << std::endl;
 }
 
 void Server::handleNewConnection()
 {
 	int clientFd = accept(_serverFd, NULL, NULL);
 	if (clientFd < 0) {
-		std::cerr << "Failed to accept new connection" << std::endl;
+		std::cerr << RED << "Failed to accept new connection" << RESET << std::endl;
 		return;
 	}
 
@@ -95,15 +123,15 @@ void Server::handleNewConnection()
 	clientEvent.data.fd = clientFd;
 
 	if (epoll_ctl(_epollFd, EPOLL_CTL_ADD, clientFd, &clientEvent) == -1) {
-		std::cerr << "Failed to add client to epoll" << std::endl;
+		std::cerr << RED << "Failed to add client to epoll" << RESET << std::endl;
 		close(clientFd);
 		return;
 	}
 	_clients[clientFd] = Client(clientFd);
-	std::cout << "Client connected" << std::endl;
+	std::cout << GREEN << "Client connected" << RESET << std::endl;
 }
 
-void Server::handleClientMessage(int fd)
+void Server::handleCommand(int fd)
 {
 	char buffer[1024];
 	ssize_t bytes = recv(fd, buffer, sizeof(buffer) - 1, 0);
@@ -111,170 +139,193 @@ void Server::handleClientMessage(int fd)
 	std::stringstream ss(data);
 	std::string line;
 
+
+	std::cout << MAGENTA << "A Request Recieved:" << RESET << std::endl;
+	std::cout << MAGENTA << data << RESET << std::endl;
 	while (std::getline(ss, line)) {
     	if (!line.empty() && line[line.size() - 1] == '\r')
 			line.erase(line.size() - 1);
 		std::cout << "Received: " << line << std::endl;
+		line[bytes - 1] = '\0';
 		if (!bytes) {
 			std::cout << "Client disconnected " << std::endl;
 			deleteClient(fd);
 		}
 		else if (bytes < 0) {
-			std::cerr << "Error receiving data" << std::endl;
+			std::cerr << RED << "Error receiving data" << RESET << std::endl;
 			deleteClient(fd);
 		}
-		else if (starts_with(line, "JOIN :"))
-			continue;
 		else if (starts_with(line, "CONNECT "))
 		{
-			line[bytes - 1] = '\0';
 			_clients[fd].setHostname(line.substr(8, line.find(' ')));
 			std::cout << _clients[fd].getHostname() << std::endl;
 			std::cout << _clients[fd].getHostname().size() << std::endl;
 		}
-		else if (starts_with(line, "PASS ")) {
-			line[bytes - 1] = '\0';
-			std::string password(line.c_str() + 5);
-			if (password == _password) {
-				std::cout << "Password accepted" << std::endl;
-				registerClientAndSendWelcome(fd);
-			} else {
-				std::cerr << "Incorrect password" << std::endl;
-				send(fd, "Incorrect password\n", 20, 0);
-			}
-		}
+		else if (starts_with(line, "JOIN :"))
+			continue;
+		else if (starts_with(line, "PASS "))
+			handlePassword(line, fd);
 		else if (starts_with(line, "NICK "))
-		{
-			line[bytes - 1] = '\0';
-			std::string nickname(line.c_str() + 5);
-			if (!_clients[fd].getNickname().empty())
-			{
-				std::string msg = ":" + _clients[fd].getNickname() + "!" + _clients[fd].getUser() + "@" + _clients[fd].getHostname() + " NICK " + nickname + "\r\n";
-				send(fd, msg.c_str(), msg.size(), 0);
-			}
-			_clients[fd].setNickname(nickname);
-			std::cout << "Nickname set to: " << nickname << std::endl;
-			registerClientAndSendWelcome(fd);
-		}
-		else if (starts_with(line, "USER ")) {
-			line[bytes - 1] = '\0';
-			std::string username(line.c_str() + 5);
-			std::string user = username.substr(0, username.find(' '));
-			_clients[fd].setUsername(username);
-			_clients[fd].setUser(user);
-			std::cout << "Username set to: " << username << std::endl;
-			registerClientAndSendWelcome(fd);
-		}
+			handleNickname(line, fd);
+		else if (starts_with(line, "USER "))
+			handleUser(line, fd);
 		else if (starts_with(line, "CAP LS"))
 		{
 			std::string capReply = ":" + _clients[fd].getHostname() + " CAP * LS :\r\n";
 			send(fd, capReply.c_str(), capReply.length(), 0);
 		}
 		else if (!_clients[fd].getIsRegistered()) {
-			std::cerr << "Client not registered" << std::endl;
+			std::cerr << RED << "Client not registered" << RESET << std::endl;
 			send(fd, "You must register first\n", 24, 0);
 		}
 		else if (starts_with(line, "KICK "))
-		{
-			line[bytes - 1] = '\0';
-			std::string info = line.substr(5);
-			if (info.empty()) {
-				send(fd, "You must specify a channel and a nickname to kick\n", 50, 0);
-				continue;
-			}
-			std::string channel = info.substr(0, info.find(' '));
-			if (_channels.find(channel) == _channels.end()) {
-				send(fd, "Channel does not exist\n", 23, 0);
-				continue;
-			}
-			std::string nickname = info.substr(info.find(' ') + 1, info.find(':') - info.find(' ') - 2);
-			std::cout << nickname << std::endl;
-			if (nickname.empty()) {
-				send(fd, "You must specify a nickname to kick\n", 37, 0);
-				continue;
-			}
-			if (_channels[channel].operators.find(fd) == _channels[channel].operators.end()) {
-				send(fd, "You are not an operator of this channel\n", 41, 0);
-				continue;
-			}
-			std::string msg = ":" + _clients[fd].getNickname() + "!" + _clients[fd].getUser() + "@" + _clients[fd].getHostname() + " KICK " + channel + " :" + nickname + "\r\n";
-			int kickfd = -1;
-			for (std::set<int>::iterator it = _channels[channel].members.begin(); it != _channels[channel].members.end(); ++it)
-			{
-				send(*it, msg.c_str(), msg.size(), 0);
-				if (_clients[*it].getNickname() == nickname)
-					kickfd = *it;
-			}
-			if (kickfd > 0)
-			{
-				_channels[channel].members.erase(kickfd);
-				if (_channels[channel].operators.find(kickfd) != _channels[channel].operators.end())
-					_channels[channel].operators.erase(kickfd);
-				std::cout << "Client " << kickfd << " kicked from channel " << channel << std::endl;
-			}
-		}
+			handleKickClient(line, fd);
 		else if (starts_with(line, "PRIVMSG "))
-		{
-			line[bytes - 1] = '\0';
-			std::string info = line.substr(8);
-			if (info.empty()) {
-				send(fd, "You must specify a message to send\n", 36, 0);
-				continue;
-			}
-			std::string dest = info.substr(0, info.find(' '));
-			if (dest.empty()) {
-				send(fd, "You must specify a destination to send the message to\n", 51, 0);
-				continue;
-			}
-			std::string message = info.substr(info.find(':') + 1);
-			if (message.empty()) {
-				send(fd, "You must specify a message to send\n", 36, 0);
-				continue;
-			}
-			std::string msg = ":" + _clients[fd].getNickname() + "!" + _clients[fd].getUser() + "@" + _clients[fd].getHostname() + " PRIVMSG " + dest + " :" + message + "\r\n";
-			for (std::set<int>::iterator it = _channels[dest].members.begin(); it != _channels[dest].members.end(); ++it)
-			{
-				if (*it != fd)
-				{
-					if (send(*it, msg.c_str(), msg.size(), 0) < 0)
-						std::cerr << "Failed to send message to client " << *it << std::endl;
-					else
-						std::cout << "Message sent to client " << *it << std::endl;
-				}
-			}
-			for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it)
-			{
-				if (it->second.getNickname() == dest && it->second.getIsRegistered())
-				{
-					if (send(it->first, msg.c_str(), msg.size(), 0) < 0)
-						std::cerr << "Failed to send message to client " << it->first << std::endl;
-					else
-						std::cout << "Message sent to client " << it->first << std::endl;
-					break;
-				}
-			}
-		}
-		else if (starts_with(line, "JOIN ")) {
-			line[bytes - 1] = '\0';
-			std::string channel(line.c_str() + 5);
-			if (channel.empty()) {
-				send(fd, "You must specify a channel to join\n", 36, 0);
-				continue;
-			}
-			if (_channels.find(channel) == _channels.end()) {
-				_channels[channel] = t_channel();
-				_channels[channel].name = channel;
-				_channels[channel].members.insert(fd);
-				_channels[channel].operators.insert(fd);
-				std::cout << "Channel " << channel << " created" << std::endl;
-			}
-			else {
-				_channels[channel].members.insert(fd);
-				std::cout << "Client " << fd << " joined channel " << channel << std::endl;
-			}
-		}
+			handlePrivateMessage(line, fd);
+		else if (starts_with(line, "JOIN "))
+			handleJoinChannel(line, fd);
 		else if (starts_with(line, "PING ")) {
 			send (fd, "PONG\r\n", 6, 0);
+		}
+	}
+}
+
+void Server::handleKickClient(const std::string& line, int fd)
+{
+	std::string info = line.substr(5);
+	if (info.empty()) {
+		send(fd, "You must specify a channel and a nickname to kick\n", 50, 0);
+		return;
+	}
+	std::string channel = info.substr(0, info.find(' '));
+	if (_channels.find(channel) == _channels.end()) {
+		send(fd, "Channel does not exist\n", 23, 0);
+		return;
+	}
+	std::string nickname = info.substr(info.find(' ') + 1, info.find(':') - info.find(' ') - 2);
+	std::cout << nickname << std::endl;
+	if (nickname.empty()) {
+		send(fd, "You must specify a nickname to kick\n", 37, 0);
+		return;
+	}
+	if (_channels[channel].operators.find(fd) == _channels[channel].operators.end()) {
+		send(fd, "You are not an operator of this channel\n", 41, 0);
+		return;
+	}
+	std::string msg = ":" + _clients[fd].getNickname() + "!" + _clients[fd].getUser() + "@" + _clients[fd].getHostname() + " KICK " + channel + " :" + nickname + "\r\n";
+	int kickfd = -1;
+	for (std::set<int>::iterator it = _channels[channel].members.begin(); it != _channels[channel].members.end(); ++it)
+	{
+		send(*it, msg.c_str(), msg.size(), 0);
+		if (_clients[*it].getNickname() == nickname)
+			kickfd = *it;
+	}
+	if (kickfd == fd)
+	{
+		send(fd, "You cannot kick yourself\n", 25, 0);
+		return;
+	}
+	if (kickfd > 0)
+	{
+		_channels[channel].members.erase(kickfd);
+		if (_channels[channel].operators.find(kickfd) != _channels[channel].operators.end())
+			_channels[channel].operators.erase(kickfd);
+		std::cout << "Client " << kickfd << " kicked from channel " << channel << std::endl;
+	}
+}
+
+void Server::handlePassword(const std::string& line, int fd)
+{
+	std::string password(line.c_str() + 5);
+	if (password == _password) {
+		std::cout << "Password accepted" << std::endl;
+		registerClientAndSendWelcome(fd);
+	} else {
+		std::cerr << RED << "Incorrect password" << RESET << std::endl;
+		send(fd, "Incorrect password\n", 20, 0);
+	}
+}
+
+void Server::handleNickname(const std::string& line, int fd)
+{
+	std::string nickname(line.c_str() + 5);
+	if (!_clients[fd].getNickname().empty())
+	{
+		std::string msg = ":" + _clients[fd].getNickname() + "!" + _clients[fd].getUser() + "@" + _clients[fd].getHostname() + " NICK " + nickname + "\r\n";
+		send(fd, msg.c_str(), msg.size(), 0);
+	}
+	_clients[fd].setNickname(nickname);
+	std::cout << "Nickname set to: " << nickname << std::endl;
+	registerClientAndSendWelcome(fd);
+}
+
+void Server::handleUser(const std::string& line, int fd)
+{
+	std::string username(line.c_str() + 5);
+	std::string user = username.substr(0, username.find(' '));
+	_clients[fd].setUsername(username);
+	_clients[fd].setUser(user);
+	std::cout << "Username set to: " << username << std::endl;
+	registerClientAndSendWelcome(fd);
+}
+
+void Server::handleJoinChannel(const std::string& line, int fd)
+{
+	std::string channel(line.c_str() + 5);
+	if (channel.empty()) {
+		send(fd, "You must specify a channel to join\n", 36, 0);
+		return;
+	}
+	if (_channels.find(channel) == _channels.end()) {
+		_channels[channel] = t_channel();
+		_channels[channel].name = channel;
+		_channels[channel].members.insert(fd);
+		_channels[channel].operators.insert(fd);
+		std::cout << "Channel " << channel << " created" << std::endl;
+	}
+	else {
+		_channels[channel].members.insert(fd);
+		std::cout << "Client " << fd << " joined channel " << channel << std::endl;
+	}
+}
+
+void Server::handlePrivateMessage(const std::string& line, int fd)
+{
+	std::string info = line.substr(8);
+	if (info.empty()) {
+		send(fd, "You must specify a message to send\n", 36, 0);
+		return	;
+	}
+	std::string dest = info.substr(0, info.find(' '));
+	if (dest.empty()) {
+		send(fd, "You must specify a destination to send the message to\n", 51, 0);
+		return;
+	}
+	std::string message = info.substr(info.find(':') + 1);
+	if (message.empty()) {
+		send(fd, "You must specify a message to send\n", 36, 0);
+		return;
+	}
+	std::string msg = ":" + _clients[fd].getNickname() + "!" + _clients[fd].getUser() + "@" + _clients[fd].getHostname() + " PRIVMSG " + dest + " :" + message + "\r\n";
+	for (std::set<int>::iterator it = _channels[dest].members.begin(); it != _channels[dest].members.end(); ++it)
+	{
+		if (*it != fd)
+		{
+			if (send(*it, msg.c_str(), msg.size(), 0) < 0)
+				std::cerr << RED << "Failed to send message to client " << *it << RESET << std::endl;
+			else
+				std::cout << "Message sent to client " << *it << std::endl;
+		}
+	}
+	for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it)
+	{
+		if (it->second.getNickname() == dest && it->second.getIsRegistered())
+		{
+			if (send(it->first, msg.c_str(), msg.size(), 0) < 0)
+				std::cerr << RED << "Failed to send message to client " << it->first << RESET << std::endl;
+			else
+				std::cout << "Message sent to client " << it->first << std::endl;
+			break;
 		}
 	}
 }

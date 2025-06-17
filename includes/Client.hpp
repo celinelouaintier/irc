@@ -40,6 +40,7 @@ class Client
         std::string _user;
         std::string _realname;
         std::string _hostname;
+        std::string _servername;
         std::vector<std::string> _channels;
 
 };

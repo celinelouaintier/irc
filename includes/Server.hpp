@@ -14,11 +14,22 @@
 #include <algorithm>
 #include <map>
 #include <set>
+#include <csignal>
 
 #include "Client.hpp"
 
-
-
+# define RED "\033[31m"
+# define GREEN "\033[32m"
+# define YELLOW "\033[33m"
+# define BLUE "\033[34m"
+# define MAGENTA "\033[35m"
+# define CYAN "\033[36m"
+# define GRAY "\033[90m"
+# define BOLD "\033[1m"
+# define UNDER "\033[4m"
+# define BLINK "\033[5m"
+# define ERASE = "\033[2K\r"
+# define RESET "\033[0m"
 
 class Server
 {
@@ -35,20 +46,6 @@ class Server
         void run();
         void shutdown();
 
-        void defineNickname(int clientFd, const std::string &nickname);
-        void defineUsername(int clientFd, const std::string &username);
-        void joinChannel(int clientFd, const std::string &channel);
-        void sendMessage(int clientFd, const std::string &message);
-
-        void kickClient(int clientFd);
-        void inviteClient(int clientFd, const std::string &channel);
-        void topicChannel(int clientFd, const std::string &channel, const std::string &topic);
-        void setMode(int clientFd, const std::string &mode);
-
-		void deleteClient(int clientFd);
-		void handleNewConnection();
-		void handleClientMessage(int clientFd);
-		void registerClientAndSendWelcome(int fd);
 
 		//Exceptions
 		class CreateSocketException : public std::exception
@@ -98,4 +95,28 @@ class Server
         std::string _password;
 		std::map<int, Client> _clients;
 		std::map<std::string, t_channel> _channels;
+
+
+        void defineNickname(int clientFd, const std::string &nickname);
+        void defineUsername(int clientFd, const std::string &username);
+        void joinChannel(int clientFd, const std::string &channel);
+        void sendMessage(int clientFd, const std::string &message);
+
+        void kickClient(int clientFd);
+        void inviteClient(int clientFd, const std::string &channel);
+        void topicChannel(int clientFd, const std::string &channel, const std::string &topic);
+        void setMode(int clientFd, const std::string &mode);
+
+		void handleNewConnection();
+		void handleCommand(int clientFd);
+		void deleteClient(int clientFd);
+		void registerClientAndSendWelcome(int fd);
+
+
+		void handlePrivateMessage(const std::string& line, int fd);
+		void handleJoinChannel(const std::string& line, int fd);
+		void handlePassword(const std::string& line, int fd);
+		void handleNickname(const std::string& line, int fd);
+		void handleUser(const std::string& line, int fd);
+		void handleKickClient(const std::string& line, int fd);
 };
