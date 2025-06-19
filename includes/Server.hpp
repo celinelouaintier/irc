@@ -97,15 +97,8 @@ class Server
 		std::map<std::string, t_channel> _channels;
 
 
-        void defineNickname(int clientFd, const std::string &nickname);
-        void defineUsername(int clientFd, const std::string &username);
-        void joinChannel(int clientFd, const std::string &channel);
-        void sendMessage(int clientFd, const std::string &message);
-
-        void kickClient(int clientFd);
-        void inviteClient(int clientFd, const std::string &channel);
-        void topicChannel(int clientFd, const std::string &channel, const std::string &topic);
-        void setMode(int clientFd, const std::string &mode);
+        void sendMessageToChannel(const std::string &channel, const std::string &msg, int fd = -1, bool sendToSelf = true);
+		void leaveChannel(const std::string &channel, int fd);
 
 		void handleNewConnection();
 		void handleCommand(int clientFd);
@@ -113,10 +106,11 @@ class Server
 		void registerClientAndSendWelcome(int fd);
 
 
-		void handlePrivateMessage(const std::string& line, int fd);
-		void handleJoinChannel(const std::string& line, int fd);
-		void handlePassword(const std::string& line, int fd);
-		void handleNickname(const std::string& line, int fd);
-		void handleUser(const std::string& line, int fd);
-		void handleKickClient(std::string& line, int fd, int bytes);
+		void handlePrivateMessage(const std::string &line, int fd);
+		void handleJoinChannel(const std::string &line, int fd);
+		void handlePassword(const std::string &line, int fd);
+		void handleNickname(std::string &line, int fd, int bytes);
+		void handleUser(const std::string &line, int fd);
+		void handleKickClient(std::string &line, int fd, int bytes);
+		void handleLeaveChannel(std::string &line, int fd, int bytes);
 };
