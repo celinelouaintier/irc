@@ -111,6 +111,7 @@ class Server
 		void handleCommand(int clientFd);
 		void deleteClient(int clientFd);
 		void registerClientAndSendWelcome(int fd);
+		void removeChannel(const std::string &channelName);
 
 
 		void handlePrivateMessage(const std::string& line, int fd);
