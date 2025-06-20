@@ -10,11 +10,8 @@ class Client
 
         Client();
 		Client(int fd);
-        Client(Client const &src);
 
         virtual ~Client();
-
-        Client &operator=(Client const &rhs);
 
 		// Getters
 		bool getIsRegistered() const { return _isRegistered; }
@@ -24,6 +21,7 @@ class Client
         std::string getUser() const { return _user; }
 		std::string getHostname() const { return _hostname; }
         std::vector<std::string> getChannels() const { return _channels; }
+		std::string &getRecvBuffer() { return recvBuffer; }
 
 		// Setters
 		void setIsRegistered(bool isRegistered) { _isRegistered = isRegistered; }
@@ -32,6 +30,7 @@ class Client
         void setUsername(const std::string &username) { _username = username; }
         void setUser(const std::string &user) { _user = user; }
 		void setHostname(const std::string &hostname) { _hostname = hostname; }
+		void setRecvBuffer(const std::string &buffer) { recvBuffer = buffer; }
 
 
     private:
@@ -45,6 +44,7 @@ class Client
         std::string _realname;
         std::string _hostname;
         std::string _servername;
+		std::string recvBuffer;
         std::vector<std::string> _channels;
 
 };

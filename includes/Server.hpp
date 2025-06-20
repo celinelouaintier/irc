@@ -38,9 +38,6 @@ class Server
         Server();
         virtual ~Server();
 
-		Server(Server const &src);
-		Server &operator=(Server const &rhs);
-
         //epoll
         void init(int port, const std::string &password);
         void run();
@@ -96,7 +93,6 @@ class Server
 		std::map<int, Client> _clients;
 		std::map<std::string, t_channel> _channels;
 
-
         void sendMessageToChannel(const std::string &channel, const std::string &msg, int fd = -1, bool sendToSelf = true);
 		void leaveChannel(const std::string &channel, int fd);
 
@@ -105,12 +101,12 @@ class Server
 		void deleteClient(int clientFd);
 		void registerClientAndSendWelcome(int fd);
 
-
 		void handlePrivateMessage(const std::string &line, int fd);
-		void handleJoinChannel(const std::string &line, int fd);
+		void handleJoinChannel(std::string &line, int fd);
 		void handlePassword(const std::string &line, int fd);
-		void handleNickname(std::string &line, int fd, int bytes);
+		void handleNickname(std::string &line, int fd);
 		void handleUser(const std::string &line, int fd);
-		void handleKickClient(std::string &line, int fd, int bytes);
-		void handleLeaveChannel(std::string &line, int fd, int bytes);
+		void handleKickClient(std::string &line, int fd);
+		void handleLeaveChannel(std::string &line, int fd);
+		void handleTopic(std::string &line, int fd);
 };
