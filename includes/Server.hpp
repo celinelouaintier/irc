@@ -96,13 +96,6 @@ class Server
 		std::map<int, Client> _clients;
 		std::map<std::string, t_channel> _channels;
 
-
-        void defineNickname(int clientFd, const std::string &nickname);
-        void defineUsername(int clientFd, const std::string &username);
-        void joinChannel(int clientFd, const std::string &channel);
-        void sendMessage(int clientFd, const std::string &message);
-
-        void kickClient(int clientFd);
         void inviteClient(int clientFd, const std::string &channel);
         void topicChannel(int clientFd, const std::string &channel, const std::string &topic);
         void setMode(int clientFd, const std::string &mode);
@@ -120,4 +113,6 @@ class Server
 		void handleNickname(const std::string& line, int fd);
 		void handleUser(const std::string& line, int fd);
 		void handleKickClient(std::string& line, int fd, int bytes);
+		void handlePartChannel(const std::string& line, int fd);
+		void handleQuit(const std::string& line, int fd);
 };
