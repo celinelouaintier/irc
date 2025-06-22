@@ -315,45 +315,70 @@ void Server::handlePassword(const std::string &line, int fd)
 
 void Server::handleNickname(std::string &line, int fd)
 {
-	while (!line.empty() && (line[line.size() - 1] == '\n' || line[line.size() - 1] == '\r'))
-   		line.erase(line.size() - 1);
+    line.erase(std::remove(line.begin(), line.end(), '\r'), line.end());
+    line.erase(std::remove(line.begin(), line.end(), '\n'), line.end());
 
-	std::string nickname(line.c_str() + 5);
-	if (nickname.empty())
-	{
-		std::string msg = ":" + _clients[fd].getHostname() + " 431 " + _clients[fd].getNickname() + " :No nickname given\r\n";
-		return (void)send(fd, msg.c_str(), msg.size(), 0);
-	}
-	if (nickname[0] == ':' || nickname[0] == '#')
-	{
-		std::string msg = ":" + _clients[fd].getHostname() + " 432 " + _clients[fd].getNickname() + " " + nickname + " :Erroneous nickname\r\n";
-		return (void)send(fd, msg.c_str(), msg.size(), 0);
-	}
-	for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it)
-	{
-		// Boucle pour vérifier si le pseudo est déjà utilisé mais azy ca marche pas
+    std::string nickname = line.substr(line.find(' ') + 1);
+    if (nickname.empty())
+    {
+        std::string msg = ":" + _clients[fd].getHostname() + " 431 ";
+        if (_clients[fd].getNickname().empty())
+            msg += "*";
+        else
+            msg += _clients[fd].getNickname();
+        msg += " :No nickname given\r\n";
+        send(fd, msg.c_str(), msg.size(), 0);
+        return;
+    }
 
-		// if (it->second.getNickname() == nickname && it->first != fd)
-		// {
-		// 	std::string msg = ":" + _clients[fd].getHostname() + " 433 " + _clients[fd].getNickname() + " " + nickname + " :Nickname is already in use\r\n";
-		// 	send(fd, msg.c_str(), msg.size(), 0);
-		// 	// nickname = "Guest" + itos(fd);
-		// 	// std::cout << "Here ! #1" << std::endl;
-		// 	return ;
-		// }
-	}
-	if (!_clients[fd].getNickname().empty())
-	{
-		std::cout << nickname << std::endl;
-		std::string msg = ":" + _clients[fd].getNickname() + "!" + _clients[fd].getUser() + "@" + _clients[fd].getHostname() + " NICK " + nickname + "\r\n";
-		send(fd, msg.c_str(), msg.size(), 0);
-		std::cout << "Here ! #2" << std::endl;
-	}
-	std::cout << nickname << std::endl;
-	std::cout << "Here ! #3" << std::endl;
-	_clients[fd].setNickname(nickname);
-	std::cout << "Nickname set to: " << nickname << std::endl;
-	registerClientAndSendWelcome(fd);
+    if (nickname[0] == ':' || nickname[0] == '#')
+    {
+        std::string msg = ":" + _clients[fd].getHostname() + " 432 ";
+        if (_clients[fd].getNickname().empty())
+            msg += "*";
+        else
+            msg += _clients[fd].getNickname();
+        msg += " " + nickname + " :Erroneous nickname\r\n";
+        send(fd, msg.c_str(), msg.size(), 0);
+        return;
+    }
+
+    std::map<int, Client>::iterator it;
+    for (it = _clients.begin(); it != _clients.end(); ++it)
+    {
+        if (it->second.getNickname() == nickname && it->first != fd)
+        {
+            std::string msg = ":" + _clients[fd].getHostname() + " 433 ";
+            if (_clients[fd].getNickname().empty())
+                msg += "*";
+            else
+                msg += _clients[fd].getNickname();
+            msg += " " + nickname + " :Nickname is already in use\r\n";
+            send(fd, msg.c_str(), msg.size(), 0);
+            return;
+        }
+    }
+
+    std::string oldNickname = _clients[fd].getNickname();
+    if (_clients[fd].getIsRegistered() && !oldNickname.empty())
+    {
+        std::map<std::string, t_channel>::iterator channelIt;
+        for (channelIt = _channels.begin(); channelIt != _channels.end(); ++channelIt)
+        {
+            const std::string& channelName = channelIt->first;
+            const t_channel& channelData = channelIt->second;
+
+            if (channelData.members.find(fd) != channelData.members.end())
+            {
+                std::string nickChangeMsg = ":" + oldNickname + "!" + _clients[fd].getUser() + "@" + _clients[fd].getHostname() + " NICK :" + nickname + "\r\n";
+                sendMessageToChannel(channelName, nickChangeMsg);
+            }
+        }
+    }
+
+    _clients[fd].setNickname(nickname);
+    std::cout << "Nickname for fd " << fd << " set to: " << nickname << std::endl;
+    registerClientAndSendWelcome(fd);
 }
 
 void Server::handleUser(const std::string &line, int fd)

@@ -1,5 +1,6 @@
-- Faire commande manquante
+- Faire commande manquante :
+	- MODE
+	- INVITE
 - Trouver si on peut faire la diff entre client irssi et nc (pour pas afficher sion)
-- Finir doublon NICK (ca menerve)
 - Envoyer bon message d'erreur (PASS, USER, NICK => Fait)
 - Le /leave et /kick qui ferme pas la fenetre irssi est trop random jl'ai regler comme j'ai pu
