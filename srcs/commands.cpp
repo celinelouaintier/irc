@@ -38,7 +38,14 @@ void Server::handleKickClient(std::string& line, int fd)
 	sendMessageToChannel(channel, msg);
 
 	if (kickfd > 0)
+	{
+		msg = "You have been kicked from " + channel + " by " + _clients[fd].getNickname();
+		if (!message.empty())
+			msg += " : " + message;
+		msg += "\r\n";
+		send(kickfd, msg.c_str(), msg.size(), 0);
 		leaveChannel(channel, kickfd);
+	}
 }
 
 // PRIVMSG command
@@ -86,8 +93,9 @@ void Server::handlePrivateMessage(const std::string& line, int fd)
 // JOIN command to join a channel
 void Server::handleJoinChannel(const std::string& line, int fd)
 {
-	Client& client = _clients[fd];
-	std::string channel(line.c_str() + 5);
+	line.erase(std::remove(line.begin(), line.end(), '\r'), line.end());
+    line.erase(std::remove(line.begin(), line.end(), '\n'), line.end());
+	std::string channel = line.substr(5);
 
 	if (channel.empty())
 		return (void)send(fd, "You must specify a channel to join\n", 36, 0);
@@ -96,6 +104,8 @@ void Server::handleJoinChannel(const std::string& line, int fd)
 		_channels[channel].name = channel;
 		_channels[channel].members.insert(fd);
 		_channels[channel].operators.insert(fd);
+		_channels[channel].isInviteOnly = false;
+		_channels[channel].topic = ""; 
 		std::cout << "Channel " << channel << " created" << std::endl;
 	}
 	else if (_channels[channel].isInviteOnly && _channels[channel].invitedUsers.find(client.getNickname()) == _channels[channel].invitedUsers.end())
@@ -105,8 +115,14 @@ void Server::handleJoinChannel(const std::string& line, int fd)
 	else {
 		_channels[channel].members.insert(fd);
 		std::cout << "Client " << fd << " joined channel " << channel << std::endl;
+		std::string msg = ":" + _clients[fd].getNickname() + "!" + _clients[fd].getUser() + "@" + _clients[fd].getHostname() + " JOIN " + channel + "\r\n";
+		sendMessageToChannel(channel, msg);
+	
+		std::string topicMsg = ":" + _clients[fd].getHostname() + " 331 " + _clients[fd].getNickname() + " " + channel + " :No topic is set\r\n";
+		if (!_channels[channel].topic.empty())
+			topicMsg = ":" + _clients[fd].getHostname() + " 332 " + _clients[fd].getNickname() + " " + channel + " :" + _channels[channel].topic + "\r\n";
+		send(fd, topicMsg.c_str(), topicMsg.size(), 0);
 	}
-	client.addChannel(channel);
 }
 
 void Server::handlePartChannel(const std::string& line, int fd)
