@@ -85,7 +85,7 @@ class Server
 			std::string topic; // #channelname : channel topic
 			std::set<int> members; // Set of client file descriptors (you can't have double with a set)
 			std::set<int> operators;
-			std::set<int> invitedUsers; // Users invited to the channel (en +i)
+			std::set<std::string> invitedUsers; // Users invited to the channel (en +i)
 			bool isInviteOnly; // If the channel is invite only
 		}			t_channel;
 
@@ -96,9 +96,9 @@ class Server
 		std::map<int, Client> _clients;
 		std::map<std::string, t_channel> _channels;
 
-        void inviteClient(int clientFd, const std::string &channel);
-        void topicChannel(int clientFd, const std::string &channel, const std::string &topic);
-        void setMode(int clientFd, const std::string &mode);
+
+        void sendMessageToChannel(const std::string &channel, const std::string &msg, int fd = -1, bool sendToSelf = true);
+		void leaveChannel(const std::string &channel, int fd);
 
 		void handleNewConnection();
 		void handleCommand(int clientFd);
@@ -110,9 +110,11 @@ class Server
 		void handlePrivateMessage(const std::string& line, int fd);
 		void handleJoinChannel(const std::string& line, int fd);
 		void handlePassword(const std::string& line, int fd);
-		void handleNickname(const std::string& line, int fd);
+		void handleNickname(std::string& line, int fd);
 		void handleUser(const std::string& line, int fd);
-		void handleKickClient(std::string& line, int fd, int bytes);
+		void handleKickClient(std::string& line, int fd);
 		void handlePartChannel(const std::string& line, int fd);
 		void handleQuit(const std::string& line, int fd);
+		void handleTopic(std::string& line, int fd);
+		void handleInvite(std::string& line, int fd);
 };

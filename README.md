@@ -1,11 +1,14 @@
 - Commandes operators:
   + INVITE
-  + TOPIC
   + MODE
+  + PING (bien le faire ?)
 - Trouver si on peut faire la diff entre client irssi et nc (pour pas afficher sion)
-- Verif si Nick et USER deja utilise et si caractere valide (cf doc NICK)
-- Envoyer bon message d'erreur
-- Rajouter motif Kick
-
-
-/!\ PART fonctionne avec /wc
+- Envoyer bon message d'erreur (PASS, USER, NICK => Fait)
+  + JOIN
+  + PART
+  + KICK
+  + QUIT
+  + TOPIC
+  + INVITE
+  + MODE
+- Envoyer un message pour pr2venir quand on est kick ?
