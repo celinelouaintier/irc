@@ -205,6 +205,8 @@ void Server::handleCommand(int fd)
 			handleTopic(line, fd);
 		else if (starts_with(line, "INVITE "))
 			handleInvite(line, fd);
+        else if (starts_with(line, "MODE "))
+            handleMode(line, fd);
 		else if (starts_with(line, "PING "))
 			send (fd, "PONG\r\n", 6, 0);
 		else if (starts_with(line, "PART "))

@@ -83,10 +83,13 @@ class Server
 		{
 			std::string name; // Channel name #channelname
 			std::string topic; // #channelname : channel topic
+            bool allTopic; // If the topic is set by the channel operator or not
 			std::set<int> members; // Set of client file descriptors (you can't have double with a set)
 			std::set<int> operators;
 			std::set<std::string> invitedUsers; // Users invited to the channel (en +i)
 			bool isInviteOnly; // If the channel is invite only
+            int limit; // Limit of users in the channel, -1 if no limit
+            std::string password; // Channel password, empty if no password
 		}			t_channel;
 
         int _epollFd;
@@ -96,6 +99,8 @@ class Server
 		std::map<int, Client> _clients;
 		std::map<std::string, t_channel> _channels;
 
+
+        // void stoi(const std::string &str, int &value) const;
 
         void sendMessageToChannel(const std::string &channel, const std::string &msg, int fd = -1, bool sendToSelf = true);
 		void leaveChannel(const std::string &channel, int fd);
@@ -117,4 +122,5 @@ class Server
 		void handleQuit(const std::string& line, int fd);
 		void handleTopic(std::string& line, int fd);
 		void handleInvite(std::string& line, int fd);
+        void handleMode(std::string& line, int fd);
 };

@@ -1,5 +1,15 @@
 #include "Server.hpp"
 
+int stoii(std::string str)
+{
+	std::stringstream s(str);
+	int i;
+
+	if (!(s >> i) || !s.eof())
+		return -1;
+	return i;
+}
+
 // KICK command to kick a client from a channel
 void Server::handleKickClient(std::string& line, int fd)
 {
@@ -146,22 +156,37 @@ void Server::handlePrivateMessage(const std::string& line, int fd)
 void Server::handleJoinChannel(const std::string& line, int fd)
 {
 	std::string channel = line.substr(5);
-
+    std::string pass;
 	if (channel.empty())
 		return (void)send(fd, "You must specify a channel to join\n", 36, 0);
+
+    if (channel.)find(' ') != std::string::npos())
+    {
+        pass = channel.substr(channel.find(' ') + 1);
+        channel = channel.substr(0, channel.find(' '));
+    }
+
+
 	if (_channels.find(channel) == _channels.end()) {
 		_channels[channel] = t_channel();
 		_channels[channel].name = channel;
 		_channels[channel].members.insert(fd);
 		_channels[channel].operators.insert(fd);
 		_channels[channel].isInviteOnly = false;
-		_channels[channel].topic = ""; 
+		_channels[channel].topic = "";
+        _channels[channel].limit = -1;
+        _channels[channel].password = "";
+        _channels[channel].allTopic = false;
 		std::cout << "Channel " << channel << " created" << std::endl;
 	}
 	else if (_channels[channel].isInviteOnly && _channels[channel].invitedUsers.find(_clients[fd].getNickname()) == _channels[channel].invitedUsers.end())
 		return (void)send(fd, "This channel is invite-only\n", 28, 0);
 	else if (_channels[channel].members.find(fd) != _channels[channel].members.end())
 		return (void)send(fd, "You are already a member of this channel\n", 42, 0);
+    else if (_channels[channel].limit != -1 && (int)_channels[channel].members.size() >= _channels[channel].limit)
+        return (void)send(fd, "This channel is full\n", 22, 0);
+    if (!_channels[channel].password.empty() && pass != _channels[channel].password)
+        return (void)send(fd, "Incorrect channel password\n", 27, 0);
 	else {
 		_channels[channel].members.insert(fd);
 		std::cout << "Client " << fd << " joined channel " << channel << std::endl;
@@ -234,7 +259,7 @@ void Server::handleTopic(std::string &line, int fd)
 		msg = ":" + _clients[fd].getHostname() + " 442 " + _clients[fd].getNickname() + " " + channel + " :You're not on that channel\r\n";
 		return (void)send(fd, msg.c_str(), msg.size(), 0);
 	}
-	if (_channels[channel].operators.find(fd) == _channels[channel].operators.end())
+	if (!allTopic && _channels[channel].operators.find(fd) == _channels[channel].operators.end())
 	{
 		msg = ":" + _clients[fd].getHostname() + " 482 " + _clients[fd].getNickname() + " " + channel + " :You're not channel operator\r\n";
 		return (void)send(fd, msg.c_str(), msg.size(), 0);
@@ -249,8 +274,8 @@ void Server::handleTopic(std::string &line, int fd)
 
 void Server::handleInvite(std::string& line, int fd)
 {
-	std::string info = line.substr(7);
 	std::string msg;
+	std::string info = line.substr(7);
 	if (info.empty())
 	{
 		msg = ":" + _clients[fd].getHostname() + " 461 " + _clients[fd].getNickname() + " INVITE :Not enough parameters\r\n";
@@ -299,6 +324,171 @@ void Server::handleInvite(std::string& line, int fd)
 	send(fd, msg.c_str(), msg.size(), 0);
 	send(targetFd, msg.c_str(), msg.size(), 0);
 	std::cout << "Invite sent to client " << targetFd << std::endl;
+
+
+}
+
+void Server::handleMode(std::string &line, int fd)
+{
+	line.erase(std::remove(line.begin(), line.end(), '\r'), line.end());
+    line.erase(std::remove(line.begin(), line.end(), '\n'), line.end());
+
+    std::string msg;
+    std::string info = line.substr(5);
+    if (info.empty())
+    {
+        msg = ":" + _clients[fd].getHostname() + " 461 " + _clients[fd].getNickname() + " MODE :Not enough parameters\r\n";
+        return (void)send(fd, msg.c_str(), msg.size(), 0);
+    }
+
+    std::string channel = info.substr(0, info.find(' '));
+    if (channel.empty())
+    {
+        msg = ":" + _clients[fd].getHostname() + " 461 " + _clients[fd].getNickname() + " MODE :No target specified\r\n";
+        return(void)send(fd, msg.c_str(), msg.size(), 0);
+    }
+
+    std::string mess = info.substr(info.find(' '));
+    if (mess.empty())
+    {
+        msg = ":" + _clients[fd].getHostname() + " 461 " + _clients[fd].getNickname() + " MODE :No mode specified\r\n";
+        return (void)send(fd, msg.c_str(), msg.size(), 0);
+    }
+
+    std::string mode = mess;
+    std::string arg = "";
+    if (mess.find(' ') != std::string::npos)
+    {
+        mode = mess.substr(0, mess.find(' '));
+        arg = mess.substr(mess.find(' ') + 1);
+    }
+
+    if (mode.empty())
+    {
+        msg = ":" + _clients[fd].getHostname() + " 461 " + _clients[fd].getNickname() + " MODE :No mode specified\r\n";
+        return (void)send(fd, msg.c_str(), msg.size(), 0);
+    }
+
+    bool add = mode[0] == '+';
+    if (mode [0] != '+' && mode[0] != '-')
+    {
+        msg = ":" + _clients[fd].getHostname() + " 501 " + _clients[fd].getNickname() + " MODE :Unknown mode\r\n";
+        return (void)send(fd, msg.c_str(), msg.size(), 0);
+    }
+    for (size_t i = 1; i < mode.size(); ++i)
+    {
+        if (mode[i] == 'i')
+        {
+            if (add)
+            {
+                if (_channels[channel].isInviteOnly)
+                {
+                    msg = ":" + _clients[fd].getHostname() + " 221 " + _clients[fd].getNickname() + " " + channel + " :Channel is already invite-only\r\n";
+                    return (void)send(fd, msg.c_str(), msg.size(), 0);
+                }
+                _channels[channel].isInviteOnly = true;
+            }
+            else
+            {
+                if (!_channels[channel].isInviteOnly)
+                {
+                    msg = ":" + _clients[fd].getHostname() + " 221 " + _clients[fd].getNickname() + " " + channel + " :Channel is not invite-only\r\n";
+                    return (void)send(fd, msg.c_str(), msg.size(), 0);
+                }
+                _channels[channel].isInviteOnly = false;
+            }
+        }
+        else if (mode[i] == 'o')
+        {
+            if (arg.empty())
+            {
+                msg = ":" + _clients[fd].getHostname() + " 461 " + _clients[fd].getNickname() + " MODE :No nickname specified\r\n";
+                return (void)send(fd, msg.c_str(), msg.size(), 0);
+            }
+            int targetFd = -1;
+            for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it)
+                if (it->second.getNickname() == arg && it->second.getIsRegistered())
+                    targetFd = it->first;
+            if (add)
+            {
+                if (_channels[channel].operators.find(targetFd) != _channels[channel].operators.end())
+                {
+                    msg = ":" + _clients[fd].getHostname() + " 221 " + _clients[fd].getNickname() + " " + channel + " :" + _clients[targetFd].getNickname() + " is already channel operator\r\n";
+                    return (void)send(fd, msg.c_str(), msg.size(), 0);
+                }
+                _channels[channel].operators.insert(fd);
+            }
+            else
+            {
+                if (_channels[channel].operators.find(fd) == _channels[channel].operators.end())
+                {
+                    msg = ":" + _clients[fd].getHostname() + " 221 " + _clients[fd].getNickname() + " " + channel + " :" + _clients[targetFd].getNickname() + " is not a channel operator\r\n";
+                    return (void)send(fd, msg.c_str(), msg.size(), 0);
+                }
+                _channels[channel].operators.erase(fd);
+            }
+        }
+        else if (mode[i] == 'l')
+        {
+            if (add)
+            {
+                if (arg.empty())
+                {
+                    msg = ":" + _clients[fd].getHostname() + " 461 " + _clients[fd].getNickname() + " MODE :No limit specified\r\n";
+                    return (void)send(fd, msg.c_str(), msg.size(), 0);
+                }
+                int limit = stoii(arg);
+                if (limit < 0)
+                {
+                    msg = ":" + _clients[fd].getHostname() + " 501 " + _clients[fd].getNickname() + " MODE :Invalid limit\r\n";
+                    return (void)send(fd, msg.c_str(), msg.size(), 0);
+                }
+                _channels[channel].limit = limit;
+            }
+            else
+                _channels[channel].limit = -1;
+        }
+        else if (mode[i] == 'k')
+        {
+            if (add)
+            {
+                if (arg.empty())
+                {
+                    msg = ":" + _clients[fd].getHostname() + " 461 " + _clients[fd].getNickname() + " MODE :No password specified\r\n";
+                    return (void)send(fd, msg.c_str(), msg.size(), 0);
+                }
+                _channels[channel].password = arg;
+            }
+            else
+                _channels[channel].password = "";
+        }
+        else if (mode[i] == 't')
+        {
+            if (add)
+            {
+                if (_channels[channel].allTopic)
+                {
+                    msg = ":" + _clients[fd].getHostname() + " 221 " + _clients[fd].getNickname() + " " + channel + " :Channel topic is already set by the channel operator\r\n";
+                    return (void)send(fd, msg.c_str(), msg.size(), 0);
+                }
+                _channels[channel].allTopic = true;
+            }
+            else
+            {
+                if (!_channels[channel].allTopic)
+                {
+                    msg = ":" + _clients[fd].getHostname() + " 221 " + _clients[fd].getNickname() + " " + channel + " :Channel topic is not set by the channel operator\r\n";
+                    return (void)send(fd, msg.c_str(), msg.size(), 0);
+                }
+                _channels[channel].allTopic = false;
+            }
+        }
+        else
+        {
+            msg = ":" + _clients[fd].getHostname() + " 472 " + _clients[fd].getNickname() + " MODE :" + mode[i] + " :Unknown mode\r\n";
+            return (void)send(fd, msg.c_str(), msg.size(), 0);
+        }
+    }
 
 
 }
