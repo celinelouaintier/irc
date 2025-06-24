@@ -159,10 +159,6 @@ void Server::handleCommand(int fd)
 	std::stringstream ss(data);
 	std::string line;
 
-
-	for (std::map<std::string, t_channel>::iterator it = _channels.begin(); it != _channels.end(); ++it)
-		if (it->second.members.size() == 0)
-			_channels.erase(it);
 	while (std::getline(ss, line)) {
     	if (!line.empty() && line[line.size() - 1] == '\r')
 			line.erase(line.size() - 1);
@@ -215,7 +211,6 @@ void Server::handleCommand(int fd)
 			handlePartChannel(line, fd);
 		else if (starts_with(line, "QUIT "))
 			handleQuit(line, fd);
-		
 	}
 }
 
@@ -235,9 +230,10 @@ void Server::sendMessageToChannel(const std::string &channel, const std::string 
 
 void Server::handlePassword(const std::string &line, int fd)
 {
+	std::string msg;
 	if (_clients[fd].getIsRegistered())
 	{
-		std::string msg = ":" + _clients[fd].getHostname() + " 462 " + _clients[fd].getNickname() + " :You may not reregister\r\n";
+		msg = ":" + _clients[fd].getHostname() + " 462 " + _clients[fd].getNickname() + " :You may not reregister\r\n";
 		return (void)send(fd, msg.c_str(), msg.size(), 0);
 	}
 	std::string password(line.c_str() + 5);
@@ -247,7 +243,7 @@ void Server::handlePassword(const std::string &line, int fd)
 		registerClientAndSendWelcome(fd);
 	} else {
 		std::cerr << RED << "Incorrect password" << RESET << std::endl;
-		std::string msg = ":" + _clients[fd].getHostname() + " 464 " + _clients[fd].getNickname() + " :Password incorrect\r\n";
+		msg = ":" + _clients[fd].getHostname() + " 464 " + _clients[fd].getNickname() + " :Password incorrect\r\n";
 		send(fd, msg.c_str(), msg.size(), 0);
 	}
 }
@@ -258,9 +254,10 @@ void Server::handleNickname(std::string &line, int fd)
     line.erase(std::remove(line.begin(), line.end(), '\n'), line.end());
 
     std::string nickname = line.substr(line.find(' ') + 1);
+	std::string msg;
     if (nickname.empty())
     {
-        std::string msg = ":" + _clients[fd].getHostname() + " 431 ";
+        msg = ":" + _clients[fd].getHostname() + " 431 ";
         if (_clients[fd].getNickname().empty())
             msg += "*";
         else
@@ -272,7 +269,7 @@ void Server::handleNickname(std::string &line, int fd)
 
     if (nickname[0] == ':' || nickname[0] == '#')
     {
-        std::string msg = ":" + _clients[fd].getHostname() + " 432 ";
+        msg = ":" + _clients[fd].getHostname() + " 432 ";
         if (_clients[fd].getNickname().empty())
             msg += "*";
         else
@@ -287,7 +284,7 @@ void Server::handleNickname(std::string &line, int fd)
     {
         if (it->second.getNickname() == nickname && it->first != fd)
         {
-            std::string msg = ":" + _clients[fd].getHostname() + " 433 ";
+            msg = ":" + _clients[fd].getHostname() + " 433 ";
             if (_clients[fd].getNickname().empty())
                 msg += "*";
             else

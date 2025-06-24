@@ -4,26 +4,43 @@
 void Server::handleKickClient(std::string& line, int fd)
 {
 	std::string message = "";
-
+	std::string msg;
 	std::string info = line.substr(5);
 	if (info.empty())
-		return (void)send(fd, "You must specify a channel and a nickname to kick\n", 50, 0);
+	{
+		msg = ":" + _clients[fd].getHostname() + " 461 " + _clients[fd].getNickname() + " KICK :Not enough parameters\r\n";
+		return (void)send(fd, msg.c_str(), msg.size(), 0);
+	}
 
 	std::string channel = info.substr(0, info.find(' '));
 	if (_channels.find(channel) == _channels.end())
-		return (void)send(fd, "Channel does not exist\n", 23, 0);
+	{
+		msg = ":" + _clients[fd].getHostname() + " 403 " + _clients[fd].getNickname() + " " + channel + " :No such channel\r\n";
+		return (void)send(fd, msg.c_str(), msg.size(), 0);
+	}
 
 	std::string nickname = info.substr(info.find(' ') + 1, info.find(':') - info.find(' ') - 2);
 	if (nickname.empty())
-		return (void)send(fd, "You must specify a nickname to kick\n", 37, 0);
+	{
+		msg = ":" + _clients[fd].getHostname() + " 461 " + _clients[fd].getNickname() + " KICK :No nickname given\r\n";
+		return (void)send(fd, msg.c_str(), msg.size(), 0);
+	}
 	if (_clients[fd].getNickname() == nickname)
 		return (void)send(fd, "You cannot kick yourself\n", 25, 0);
 
 	if (info.find(':') != std::string::npos)
 		message = info.substr(info.find(':') + 1);
 
+	if (_channels[channel].members.find(fd) == _channels[channel].members.end())
+	{
+		msg = ":" + _clients[fd].getHostname() + " 442 " + _clients[fd].getNickname() + " " + channel + " :You're not on that channel\r\n";
+		return (void)send(fd, msg.c_str(), msg.size(), 0);
+	}
 	if (_channels[channel].operators.find(fd) == _channels[channel].operators.end())
-		return (void)send(fd, "You are not an operator of this channel\n", 41, 0);
+	{
+		msg = ":" + _clients[fd].getHostname() + " 482 " + _clients[fd].getNickname() + " " + channel + " :You're not channel operator\r\n";
+		return (void)send(fd, msg.c_str(), msg.size(), 0);
+	}
 
 	int kickfd = -1;
 	for (std::set<int>::iterator it = _channels[channel].members.begin(); it != _channels[channel].members.end(); ++it)
@@ -32,9 +49,12 @@ void Server::handleKickClient(std::string& line, int fd)
 			kickfd = *it;
 	}
 	if (kickfd == -1)
-		return (void)send(fd, "Client not found in channel\n", 29, 0);
+	{
+		msg = ":" + _clients[fd].getHostname() + " 441 " + _clients[fd].getNickname() + " " + nickname + " " + channel + " :They aren't on that channel\r\n";
+		return (void)send(fd, msg.c_str(), msg.size(), 0);
+	}
 
-	std::string msg = ":" + _clients[fd].getNickname() + "!" + _clients[fd].getUser() + "@" + _clients[fd].getHostname() + " KICK " + channel + " " + nickname + " :" + message + "\r\n";
+	msg = ":" + _clients[fd].getNickname() + "!" + _clients[fd].getUser() + "@" + _clients[fd].getHostname() + " KICK " + channel + " " + nickname + " :" + message + "\r\n";
 	sendMessageToChannel(channel, msg);
 
 	if (kickfd > 0)
@@ -52,40 +72,72 @@ void Server::handleKickClient(std::string& line, int fd)
 void Server::handlePrivateMessage(const std::string& line, int fd)
 {
 	std::string info = line.substr(8);
-	if (info.empty()) {
-		send(fd, "You must specify a message to send\n", 36, 0);
-		return	;
-	}
-	std::string dest = info.substr(0, info.find(' '));
-	if (dest.empty()) {
-		send(fd, "You must specify a destination to send the message to\n", 51, 0);
-		return;
-	}
-	std::string message = info.substr(info.find(':') + 1);
-	if (message.empty()) {
-		send(fd, "You must specify a message to send\n", 36, 0);
-		return;
-	}
-	std::string msg = ":" + _clients[fd].getNickname() + "!" + _clients[fd].getUser() + "@" + _clients[fd].getHostname() + " PRIVMSG " + dest + " :" + message + "\r\n";
-	for (std::set<int>::iterator it = _channels[dest].members.begin(); it != _channels[dest].members.end(); ++it)
+	std::string msg;
+	if (info.empty())
 	{
-		if (*it != fd)
+		msg = ":" + _clients[fd].getHostname() + " 461 " + _clients[fd].getNickname() + " PRIVMSG :Not enough parameters\r\n";
+		return (void)send(fd, msg.c_str(), msg.size(), 0);
+	}
+
+	std::string dest = info.substr(0, info.find(' '));
+	if (dest.empty())
+	{
+		msg = ":" + _clients[fd].getHostname() + " 461 " + _clients[fd].getNickname() + " PRIVMSG :No destination specified\r\n";
+		return (void)send(fd, msg.c_str(), msg.size(), 0);
+	}
+	if (dest[0] == '#')
+	{
+		if (_channels.find(dest) == _channels.end())
 		{
-			if (send(*it, msg.c_str(), msg.size(), 0) < 0)
-				std::cerr << RED << "Failed to send message to client " << *it << RESET << std::endl;
-			else
-				std::cout << "Message sent to client " << *it << std::endl;
+			msg = ":" + _clients[fd].getHostname() + " 403 " + _clients[fd].getNickname() + " " + dest + " :No such channel\r\n";
+			return (void)send(fd, msg.c_str(), msg.size(), 0);
+		}
+		if (_channels[dest].members.find(fd) == _channels[dest].members.end())
+		{
+			msg = ":" + _clients[fd].getHostname() + " 442 " + _clients[fd].getNickname() + " " + dest + " :You're not on that channel\r\n";
+			return (void)send(fd, msg.c_str(), msg.size(), 0);
 		}
 	}
-	for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it)
+	else
 	{
-		if (it->second.getNickname() == dest && it->second.getIsRegistered())
+		bool found = false;
+		for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it)
 		{
-			if (send(it->first, msg.c_str(), msg.size(), 0) < 0)
-				std::cerr << RED << "Failed to send message to client " << it->first << RESET << std::endl;
-			else
-				std::cout << "Message sent to client " << it->first << std::endl;
-			break;
+			if (it->second.getNickname() == dest && it->second.getIsRegistered())
+			{
+				found = true;
+				break;
+			}
+		}
+		if (!found)
+		{
+			msg = ":" + _clients[fd].getHostname() + " 401 " + _clients[fd].getNickname() + " " + dest + " :No such nick/channel\r\n";
+			return (void)send(fd, msg.c_str(), msg.size(), 0);
+		}
+	}
+
+	std::string message = info.substr(info.find(':') + 1);
+	if (message.empty())
+	{
+		msg = ":" + _clients[fd].getHostname() + " 412 " + _clients[fd].getNickname() + " :No text to send\r\n";
+		return (void)send(fd, msg.c_str(), msg.size(), 0);
+	}
+
+	msg = ":" + _clients[fd].getNickname() + "!" + _clients[fd].getUser() + "@" + _clients[fd].getHostname() + " PRIVMSG " + dest + " :" + message + "\r\n";
+	if (dest[0] == '#')
+		sendMessageToChannel(dest, msg, fd, false);
+	else 
+	{
+		for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it)
+		{
+			if (it->second.getNickname() == dest && it->second.getIsRegistered())
+			{
+				if (send(it->first, msg.c_str(), msg.size(), 0) < 0)
+					std::cerr << RED << "Failed to send message to client " << it->first << RESET << std::endl;
+				else
+					std::cout << "Message sent to client " << it->first << std::endl;
+				break;
+			}
 		}
 	}
 }
@@ -93,8 +145,6 @@ void Server::handlePrivateMessage(const std::string& line, int fd)
 // JOIN command to join a channel
 void Server::handleJoinChannel(const std::string& line, int fd)
 {
-	line.erase(std::remove(line.begin(), line.end(), '\r'), line.end());
-    line.erase(std::remove(line.begin(), line.end(), '\n'), line.end());
 	std::string channel = line.substr(5);
 
 	if (channel.empty())
@@ -108,7 +158,7 @@ void Server::handleJoinChannel(const std::string& line, int fd)
 		_channels[channel].topic = ""; 
 		std::cout << "Channel " << channel << " created" << std::endl;
 	}
-	else if (_channels[channel].isInviteOnly && _channels[channel].invitedUsers.find(client.getNickname()) == _channels[channel].invitedUsers.end())
+	else if (_channels[channel].isInviteOnly && _channels[channel].invitedUsers.find(_clients[fd].getNickname()) == _channels[channel].invitedUsers.end())
 		return (void)send(fd, "This channel is invite-only\n", 28, 0);
 	else if (_channels[channel].members.find(fd) != _channels[channel].members.end())
 		return (void)send(fd, "You are already a member of this channel\n", 42, 0);
@@ -117,7 +167,7 @@ void Server::handleJoinChannel(const std::string& line, int fd)
 		std::cout << "Client " << fd << " joined channel " << channel << std::endl;
 		std::string msg = ":" + _clients[fd].getNickname() + "!" + _clients[fd].getUser() + "@" + _clients[fd].getHostname() + " JOIN " + channel + "\r\n";
 		sendMessageToChannel(channel, msg);
-	
+
 		std::string topicMsg = ":" + _clients[fd].getHostname() + " 331 " + _clients[fd].getNickname() + " " + channel + " :No topic is set\r\n";
 		if (!_channels[channel].topic.empty())
 			topicMsg = ":" + _clients[fd].getHostname() + " 332 " + _clients[fd].getNickname() + " " + channel + " :" + _channels[channel].topic + "\r\n";
@@ -128,9 +178,13 @@ void Server::handleJoinChannel(const std::string& line, int fd)
 void Server::handlePartChannel(const std::string& line, int fd)
 {
 	std::string message = "";
+	std::string msg;
 	std::string info = line.substr(5);
 	if (info.empty()) 
-		return (void)send(fd, "You must specify a channel to leave\n", 36, 0);
+	{
+		msg = ":" + _clients[fd].getHostname() + " 461 " + _clients[fd].getNickname() + " PART :Not enough parameters\r\n";
+		return (void)send(fd, msg.c_str(), msg.size(), 0);
+	}
 
 	std::string channel = info;
 	if (info.find(':') != std::string::npos)
@@ -139,11 +193,17 @@ void Server::handlePartChannel(const std::string& line, int fd)
 		channel = info.substr(0, info.find(' '));
 	}
 	if (_channels.find(channel) == _channels.end())
-		return (void)send(fd, "Channel does not exist\n", 23, 0);
+	{
+		msg = ":" + _clients[fd].getHostname() + " 403 " + _clients[fd].getNickname() + " " + channel + " :No such channel\r\n";
+		return (void)send(fd, msg.c_str(), msg.size(), 0);
+	}
 	if (_channels[channel].members.find(fd) == _channels[channel].members.end())
-		return (void)send(fd, "You are not a member of this channel\n", 34, 0);
+	{
+		msg = ":" + _clients[fd].getHostname() + " 442 " + _clients[fd].getNickname() + " " + channel + " :You're not on that channel\r\n";
+		return (void)send(fd, msg.c_str(), msg.size(), 0);
+	}
 
-	std::string msg = ":" + _clients[fd].getNickname() + "!" + _clients[fd].getUser() + "@" + _clients[fd].getHostname() + " PART " + channel + " :" + message + "\r\n";
+	msg = ":" + _clients[fd].getNickname() + "!" + _clients[fd].getUser() + "@" + _clients[fd].getHostname() + " PART " + channel + " :" + message + "\r\n";
 	sendMessageToChannel(channel, msg);
 
 	leaveChannel(channel, fd);
@@ -156,54 +216,91 @@ void Server::handleTopic(std::string &line, int fd)
     line.erase(std::remove(line.begin(), line.end(), '\n'), line.end());
 
 	std::string info = line.substr(6);
+	std::string msg;
 	if (info.empty())
-		return (void)send(fd, "You must specify a channel to set the topic for\n", 47, 0);
+	{
+		msg = ":" + _clients[fd].getHostname() + " 461 " + _clients[fd].getNickname() + " TOPIC :Not enough parameters\r\n";
+		return (void)send(fd, msg.c_str(), msg.size(), 0);
+	}
 
 	std::string channel = info.substr(0, info.find(' '));
 	if (_channels.find(channel) == _channels.end())
-		return (void)send(fd, "Channel does not exist\n", 23, 0);
+	{
+		msg = ":" + _clients[fd].getHostname() + " 403 " + _clients[fd].getNickname() + " " + channel + " :No such channel\r\n";
+		return (void)send(fd, msg.c_str(), msg.size(), 0);
+	}
 	if (_channels[channel].members.find(fd) == _channels[channel].members.end())
-		return (void)send(fd, "You are not a member of this channel\n", 34, 0);
+	{
+		msg = ":" + _clients[fd].getHostname() + " 442 " + _clients[fd].getNickname() + " " + channel + " :You're not on that channel\r\n";
+		return (void)send(fd, msg.c_str(), msg.size(), 0);
+	}
 	if (_channels[channel].operators.find(fd) == _channels[channel].operators.end())
-		return (void)send(fd, "You are not an operator of this channel\n", 41, 0);
+	{
+		msg = ":" + _clients[fd].getHostname() + " 482 " + _clients[fd].getNickname() + " " + channel + " :You're not channel operator\r\n";
+		return (void)send(fd, msg.c_str(), msg.size(), 0);
+	}
 
 	std::string topic = line.substr(line.find(':') + 1);
 	_channels[channel].topic = topic;
 
-	std::string msg = ":" + _clients[fd].getNickname() + "!" + _clients[fd].getUser() + "@" + _clients[fd].getHostname() + " TOPIC " + channel + " :" + topic + "\r\n";
+	msg = ":" + _clients[fd].getNickname() + "!" + _clients[fd].getUser() + "@" + _clients[fd].getHostname() + " TOPIC " + channel + " :" + topic + "\r\n";
 	sendMessageToChannel(channel, msg);
 }
 
 void Server::handleInvite(std::string& line, int fd)
 {
 	std::string info = line.substr(7);
+	std::string msg;
 	if (info.empty())
-		return (void)send(fd, "You must specify a channel and a nickname to invite\n", 53, 0);
+	{
+		msg = ":" + _clients[fd].getHostname() + " 461 " + _clients[fd].getNickname() + " INVITE :Not enough parameters\r\n";
+		return (void)send(fd, msg.c_str(), msg.size(), 0);
+	}
 
 	std::string nickname = info.substr(0, info.find(' '));
 	if (nickname.empty())
-		return (void)send(fd, "You must specify a nickname to invite\n", 38, 0);
+	{
+		msg = ":" + _clients[fd].getHostname() + " 461 " + _clients[fd].getNickname() + " INVITE :No nickname given\r\n";
+		return (void)send(fd, msg.c_str(), msg.size(), 0);
+	}
 
 	std::string channel = info.substr(info.find(' ') + 1);
 	if (_channels.find(channel) == _channels.end())
-		return (void)send(fd, "Channel does not exist\n", 23, 0);
+	{
+		msg = ":" + _clients[fd].getHostname() + " 403 " + _clients[fd].getNickname() + " " + channel + " :No such channel\r\n";
+		return (void)send(fd, msg.c_str(), msg.size(), 0);
+	}
+
+	if (_channels[channel].members.find(fd) == _channels[channel].members.end())
+	{
+		msg = ":" + _clients[fd].getHostname() + " 442 " + _clients[fd].getNickname() + " " + channel + " :You're not on that channel\r\n";
+		return (void)send(fd, msg.c_str(), msg.size(), 0);
+	}
 
 	if (_channels[channel].operators.find(fd) == _channels[channel].operators.end())
-		return (void)send(fd, "You are not an operator of this channel\n", 41, 0);
+	{
+		msg = ":" + _clients[fd].getHostname() + " 482 " + _clients[fd].getNickname() + " " + channel + " :You're not channel operator\r\n";
+		return (void)send(fd, msg.c_str(), msg.size(), 0);
+	}
+
+	int targetFd = -1;
+	for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it)
+		if (it->second.getNickname() == nickname && it->second.getIsRegistered())
+			targetFd = it->first;
+
+	if (_channels[channel].members.find(targetFd) != _channels[channel].members.end())
+	{
+		msg = ":" + _clients[fd].getHostname() + " 443 " + _clients[fd].getNickname() + " " + channel + " :User is already in the channel\r\n";
+		return (void)send(fd, msg.c_str(), msg.size(), 0);
+	}
 
 	_channels[channel].invitedUsers.insert(nickname);
-	std::string msg = ":" + _clients[fd].getNickname() + "!" + _clients[fd].getUser() + "@" + _clients[fd].getHostname() + " INVITE " + nickname + " " + channel + "\r\n";
+	msg = ":" + _clients[fd].getNickname() + "!" + _clients[fd].getUser() + "@" + _clients[fd].getHostname() + " INVITE " + nickname + " " + channel + "\r\n";
 	send(fd, msg.c_str(), msg.size(), 0);
+	send(targetFd, msg.c_str(), msg.size(), 0);
+	std::cout << "Invite sent to client " << targetFd << std::endl;
 
-	for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it)
-	{
-		if (it->second.getNickname() == nickname && it->second.getIsRegistered())
-		{
-			send(it->first, msg.c_str(), msg.size(), 0);
-			std::cout << "Invite sent to client " << it->first << std::endl;
-			return;
-		}
-	}
+
 }
 
 void Server::handleQuit(const std::string& line, int fd)
