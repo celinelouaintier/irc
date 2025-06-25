@@ -146,18 +146,19 @@ void Server::handleCommand(int fd)
 	ssize_t bytes = recv(fd, buffer, sizeof(buffer) - 1, 0);
 	std::string data(buffer, bytes);
 	
-	if (data.find("\r\n") == std::string::npos) {
-		_buffers[fd] += data; // Store the incomplete data for next time
-		return; // Wait for more data
+	if (data.find("\n") == std::string::npos) {
+		_buffers[fd].append(data);
+		return;
 	}
 	std::string s = _buffers[fd];
-
 	_buffers.erase(fd);
-	std::stringstream ss(s);
-	std::string line;
-
-	while (std::getline(ss, line)) {
-    	if (!line.empty() && line[line.size() - 1] == '\r')
+	s += data;
+	bytes = s.length();
+	size_t pos = 0;
+	while ((pos = s.find("\n")) != std::string::npos) {
+		std::string line = s.substr(0, pos);
+		s.erase(0, pos + 1);
+		if (!line.empty() && line[line.size() - 1] == '\r')
 			line.erase(line.size() - 1);
 		std::cout << MAGENTA << "\nA Request Received:" << RESET << std::endl;
 		std::cout << MAGENTA << line << RESET << std::endl;
@@ -202,8 +203,8 @@ void Server::handleCommand(int fd)
 			handleTopic(line, fd);
 		else if (starts_with(line, "INVITE "))
 			handleInvite(line, fd);
-        else if (starts_with(line, "MODE "))
-            handleMode(line, fd);
+		else if (starts_with(line, "MODE "))
+			handleMode(line, fd);
 		else if (starts_with(line, "PING "))
 			send (fd, "PONG\r\n", 6, 0);
 		else if (starts_with(line, "PART "))
@@ -250,69 +251,69 @@ void Server::handlePassword(const std::string &line, int fd)
 void Server::handleNickname(std::string &line, int fd)
 {
 	line.erase(std::remove(line.begin(), line.end(), '\r'), line.end());
-    line.erase(std::remove(line.begin(), line.end(), '\n'), line.end());
+	line.erase(std::remove(line.begin(), line.end(), '\n'), line.end());
 
-    std::string nickname = line.substr(line.find(' ') + 1);
+	std::string nickname = line.substr(line.find(' ') + 1);
 	std::string msg;
-    if (nickname.empty())
-    {
-        msg = ":" + _clients[fd].getHostname() + " 431 ";
-        if (_clients[fd].getNickname().empty())
-            msg += "*";
-        else
-            msg += _clients[fd].getNickname();
-        msg += " :No nickname given\r\n";
-        send(fd, msg.c_str(), msg.size(), 0);
-        return;
-    }
+	if (nickname.empty())
+	{
+		msg = ":" + _clients[fd].getHostname() + " 431 ";
+		if (_clients[fd].getNickname().empty())
+			msg += "*";
+		else
+			msg += _clients[fd].getNickname();
+		msg += " :No nickname given\r\n";
+		send(fd, msg.c_str(), msg.size(), 0);
+		return;
+	}
 
-    if (nickname[0] == ':' || nickname[0] == '#')
-    {
-        msg = ":" + _clients[fd].getHostname() + " 432 ";
-        if (_clients[fd].getNickname().empty())
-            msg += "*";
-        else
-            msg += _clients[fd].getNickname();
-        msg += " " + nickname + " :Erroneous nickname\r\n";
-        send(fd, msg.c_str(), msg.size(), 0);
-        return;
-    }
+	if (nickname[0] == ':' || nickname[0] == '#')
+	{
+		msg = ":" + _clients[fd].getHostname() + " 432 ";
+		if (_clients[fd].getNickname().empty())
+			msg += "*";
+		else
+			msg += _clients[fd].getNickname();
+		msg += " " + nickname + " :Erroneous nickname\r\n";
+		send(fd, msg.c_str(), msg.size(), 0);
+		return;
+	}
 
-    std::map<int, Client>::iterator it;
-    for (it = _clients.begin(); it != _clients.end(); ++it)
-    {
-        if (it->second.getNickname() == nickname && it->first != fd)
-        {
-            msg = ":" + _clients[fd].getHostname() + " 433 ";
-            if (_clients[fd].getNickname().empty())
-                msg += "*";
-            else
-                msg += _clients[fd].getNickname();
-            msg += " " + nickname + " :Nickname is already in use\r\n";
-            send(fd, msg.c_str(), msg.size(), 0);
-            return;
-        }
-    }
+	std::map<int, Client>::iterator it;
+	for (it = _clients.begin(); it != _clients.end(); ++it)
+	{
+		if (it->second.getNickname() == nickname && it->first != fd)
+		{
+			msg = ":" + _clients[fd].getHostname() + " 433 ";
+			if (_clients[fd].getNickname().empty())
+				msg += "*";
+			else
+				msg += _clients[fd].getNickname();
+			msg += " " + nickname + " :Nickname is already in use\r\n";
+			send(fd, msg.c_str(), msg.size(), 0);
+			return;
+		}
+	}
 
-    std::string oldNickname = _clients[fd].getNickname();
-    if (_clients[fd].getIsRegistered() && !oldNickname.empty())
-    {
-        std::map<std::string, t_channel>::iterator channelIt;
-        std::string nickChangeMsg = ":" + oldNickname + "!" + _clients[fd].getUser() + "@" + _clients[fd].getHostname() + " NICK :" + nickname + "\r\n";
-        for (channelIt = _channels.begin(); channelIt != _channels.end(); ++channelIt)
-        {
-            const std::string& channelName = channelIt->first;
-            const t_channel& channelData = channelIt->second;
+	std::string oldNickname = _clients[fd].getNickname();
+	if (_clients[fd].getIsRegistered() && !oldNickname.empty())
+	{
+		std::map<std::string, t_channel>::iterator channelIt;
+		std::string nickChangeMsg = ":" + oldNickname + "!" + _clients[fd].getUser() + "@" + _clients[fd].getHostname() + " NICK :" + nickname + "\r\n";
+		for (channelIt = _channels.begin(); channelIt != _channels.end(); ++channelIt)
+		{
+			const std::string& channelName = channelIt->first;
+			const t_channel& channelData = channelIt->second;
 
-            if (channelData.members.find(fd) != channelData.members.end())
-                sendMessageToChannel(channelName, nickChangeMsg);
-        }
+			if (channelData.members.find(fd) != channelData.members.end())
+				sendMessageToChannel(channelName, nickChangeMsg);
+		}
 		send(fd, nickChangeMsg.c_str(), nickChangeMsg.size(), 0);
-    }
+	}
 
-    _clients[fd].setNickname(nickname);
-    std::cout << "Nickname for fd " << fd << " set to: " << nickname << std::endl;
-    registerClientAndSendWelcome(fd);
+	_clients[fd].setNickname(nickname);
+	std::cout << "Nickname for fd " << fd << " set to: " << nickname << std::endl;
+	registerClientAndSendWelcome(fd);
 }
 
 void Server::handleUser(const std::string &line, int fd)
