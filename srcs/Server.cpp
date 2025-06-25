@@ -32,24 +32,38 @@ bool starts_with(const std::string& str, const std::string& prefix) {
 void Server::init(int port, const std::string &password)
 {
 	_password = password;
+	_serverFd = -1;
+	_epollFd = -1;
 	_serverFd = socket(AF_INET, SOCK_STREAM, 0);
 	if (_serverFd < 0)
+	{
+		shutdown();
 		throw CreateSocketException();
+	}
 
 	_serverAddr.sin_family = AF_INET;
 	_serverAddr.sin_addr.s_addr = INADDR_ANY;
 	_serverAddr.sin_port = htons(port);
 
 	if (bind(_serverFd, (struct sockaddr *)&_serverAddr, sizeof(_serverAddr)) < 0)
+	{
+		shutdown();
 		throw BindingSocketException();
+	}
 	std::cout << "Server started on port " << port << std::endl;
 	if (listen(_serverFd, 5) < 0) 
+	{
+		shutdown();
 		throw listeningSocketException();
+	}
 	std::cout << "Waiting for connections..." << std::endl;
 
 	_epollFd = epoll_create1(0);
 	if (_epollFd == -1)
+	{
+		shutdown();
 		throw CreateEpollException();
+	}
 }
 
 void Server::run()
@@ -59,7 +73,10 @@ void Server::run()
 	serverEvent.data.fd = _serverFd;
 
 	if (epoll_ctl(_epollFd, EPOLL_CTL_ADD, _serverFd, &serverEvent) == -1)
+	{
+		shutdown();
 		throw CreateEpollException();
+	}
 	signal(SIGINT, handle_sigint);
 
 	while(1)
@@ -69,8 +86,8 @@ void Server::run()
 
 		if (g_sig)
 		{
-
 			std::cerr << YELLOW << "\nSIGINT detected, servers shutting down..." << RESET << std::endl;
+			shutdown();
 			break;
 		}
 
@@ -89,11 +106,15 @@ void Server::run()
 
 void Server::shutdown()
 {
-	std::map<int, Client>::iterator it = _clients.begin();
-	while (it != _clients.end())
+	if (_serverFd > 0)
+		close(_serverFd);
+	if (_epollFd > 0)
+		close(_epollFd);
+	for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it)
 	{
-		deleteClient(it->first);
-		it++;
+		close(it->first);
+		epoll_ctl(_epollFd, EPOLL_CTL_DEL, it->first, NULL);
+		std::cout << "Client " << it->first << " disconnected" << std::endl;
 	}
 	std::cout << GREEN << "Server shut down. Thank you for having chosen our service. Have a nice day~" << RESET << std::endl;
 }
@@ -119,29 +140,42 @@ void Server::handleNewConnection()
 	std::cout << GREEN << "Client connected" << RESET << std::endl;
 }
 
+void Server::removeChannel(const std::string &channelName)
+{
+	std::map<std::string, t_channel>::iterator it = _channels.find(channelName);
+	if (it != _channels.end())
+	{
+		_channels.erase(it);
+		std::cout << "Channel " << channelName << " removed" << std::endl;
+	}
+	else
+	{
+		std::cerr << RED << "Channel " << channelName << " not found" << RESET << std::endl;
+	}
+}
+
 void Server::handleCommand(int fd)
 {
 	char buffer[1024];
 	ssize_t bytes = recv(fd, buffer, sizeof(buffer) - 1, 0);
-	if (!bytes) {
-		std::cout << "Client disconnected " << std::endl;
-		deleteClient(fd);
-	}
-	else if (bytes < 0) {
-		std::cerr << RED << "Error receiving data" << RESET << std::endl;
-		deleteClient(fd);
-	}
-	buffer[bytes] = '\0';
-	_clients[fd].getRecvBuffer() += buffer;
+	std::string data(buffer, bytes);
+	std::stringstream ss(data);
+	std::string line;
 
-	size_t pos;
-	while ((pos = _clients[fd].getRecvBuffer().find("\r\n")) != std::string::npos) {
-		std::string line = _clients[fd].getRecvBuffer().substr(0, pos);
-		_clients[fd].getRecvBuffer().erase(0, pos + 2);
+	while (std::getline(ss, line)) {
+    	if (!line.empty() && line[line.size() - 1] == '\r')
+			line.erase(line.size() - 1);
 		std::cout << MAGENTA << "\nA Request Received:" << RESET << std::endl;
 		std::cout << MAGENTA << line << RESET << std::endl;
-
-		if (starts_with(line, "CONNECT "))
+		if (!bytes) {
+			std::cout << "Client disconnected " << std::endl;
+			deleteClient(fd);
+		}
+		else if (bytes < 0) {
+			std::cerr << RED << "Error receiving data" << RESET << std::endl;
+			deleteClient(fd);
+		}
+		else if (starts_with(line, "CONNECT "))
 		{
 			_clients[fd].setHostname(line.substr(8, line.find(' ')));
 			std::cout << _clients[fd].getHostname() << std::endl;
@@ -164,121 +198,25 @@ void Server::handleCommand(int fd)
 			std::cerr << RED << "Client not registered" << RESET << std::endl;
 			send(fd, "You must register first\n", 24, 0);
 		}
-		else if (starts_with(line, "TOPIC "))
-			handleTopic(line, fd);
 		else if (starts_with(line, "KICK "))
 			handleKickClient(line, fd);
 		else if (starts_with(line, "PRIVMSG "))
 			handlePrivateMessage(line, fd);
 		else if (starts_with(line, "JOIN "))
 			handleJoinChannel(line, fd);
-		else if (starts_with(line, "PING ")) {
+		else if (starts_with(line, "TOPIC "))
+			handleTopic(line, fd);
+		else if (starts_with(line, "INVITE "))
+			handleInvite(line, fd);
+        else if (starts_with(line, "MODE "))
+            handleMode(line, fd);
+		else if (starts_with(line, "PING "))
 			send (fd, "PONG\r\n", 6, 0);
-		}
 		else if (starts_with(line, "PART "))
-			handleLeaveChannel(line, fd);
-		else if (starts_with(line, "QUIT "))
-		{
-			for (std::map<std::string, t_channel>::iterator it = _channels.begin(); it != _channels.end(); ++it)
-				if (it->second.members.find(fd) != it->second.members.end())
-					leaveChannel(it->first, fd);
-			deleteClient(fd);
-		}
+			handlePartChannel(line, fd);
+		else if (starts_with(line, "QUIT"))
+			handleQuit(line, fd);
 	}
-}
-
-void Server::handleTopic(std::string &line, int fd)
-{
-	while (!line.empty() && (line[line.size() - 1] == '\n' || line[line.size() - 1] == '\r'))
-		line.erase(line.size() - 1);
-
-	std::string info = line.substr(6);
-	if (info.empty())
-		return (void)send(fd, "You must specify a channel to set the topic for\n", 47, 0);
-
-	std::string channel = info.substr(0, info.find(' '));
-	if (_channels.find(channel) == _channels.end())
-		return (void)send(fd, "Channel does not exist\n", 23, 0);
-	if (_channels[channel].members.find(fd) == _channels[channel].members.end())
-		return (void)send(fd, "You are not a member of this channel\n", 34, 0);
-	if (_channels[channel].operators.find(fd) == _channels[channel].operators.end())
-		return (void)send(fd, "You are not an operator of this channel\n", 41, 0);
-
-	std::string topic = line.substr(line.find(':') + 1);
-	_channels[channel].topic = topic;
-
-	std::string msg = ":" + _clients[fd].getNickname() + "!" + _clients[fd].getUser() + "@" + _clients[fd].getHostname() + " TOPIC " + channel + " :" + topic + "\r\n";
-	sendMessageToChannel(channel, msg);
-}
-
-void Server::handleLeaveChannel(std::string &line, int fd)
-{
-	while (!line.empty() && (line[line.size() - 1] == '\n' || line[line.size() - 1] == '\r'))
-   		line.erase(line.size() - 1);
-
-	std::string message = "";
-	std::string info = line.substr(5);
-	if (info.empty()) 
-		return (void)send(fd, "You must specify a channel to leave\n", 36, 0);
-
-	std::string channel = info;
-	if (info.find(':') != std::string::npos)
-	{
-		message = info.substr(info.find(':') + 1);
-		channel = info.substr(0, info.find(' '));
-	}
-	if (_channels.find(channel) == _channels.end())
-		return (void)send(fd, "Channel does not exist\n", 23, 0);
-	if (_channels[channel].members.find(fd) == _channels[channel].members.end())
-		return (void)send(fd, "You are not a member of this channel\n", 34, 0);
-
-	std::string msg = ":" + _clients[fd].getNickname() + "!" + _clients[fd].getUser() + "@" + _clients[fd].getHostname() + " PART " + channel + " :" + message + "\r\n";
-	sendMessageToChannel(channel, msg);
-
-	leaveChannel(channel, fd);
-}
-
-void Server::handleKickClient(std::string &line, int fd)
-{
-	while (!line.empty() && (line[line.size() - 1] == '\n' || line[line.size() - 1] == '\r'))
-   		line.erase(line.size() - 1);
-
-	std::string message = "";
-
-	std::string info = line.substr(5);
-	if (info.empty())
-		return (void)send(fd, "You must specify a channel and a nickname to kick\n", 50, 0);
-
-	std::string channel = info.substr(0, info.find(' '));
-	if (_channels.find(channel) == _channels.end())
-		return (void)send(fd, "Channel does not exist\n", 23, 0);
-
-	std::string nickname = info.substr(info.find(' ') + 1, info.find(':') - info.find(' ') - 2);
-	if (nickname.empty())
-		return (void)send(fd, "You must specify a nickname to kick\n", 37, 0);
-	if (_clients[fd].getNickname() == nickname)
-		return (void)send(fd, "You cannot kick yourself\n", 25, 0);
-
-	if (info.find(':') != std::string::npos)
-		message = info.substr(info.find(':') + 1);
-
-	if (_channels[channel].operators.find(fd) == _channels[channel].operators.end())
-		return (void)send(fd, "You are not an operator of this channel\n", 41, 0);
-
-	int kickfd = -1;
-	for (std::set<int>::iterator it = _channels[channel].members.begin(); it != _channels[channel].members.end(); ++it)
-	{
-		if (_clients[*it].getNickname() == nickname)
-			kickfd = *it;
-	}
-	if (kickfd == -1)
-		return (void)send(fd, "Client not found in channel\n", 29, 0);
-
-	std::string msg = ":" + _clients[fd].getNickname() + "!" + _clients[fd].getUser() + "@" + _clients[fd].getHostname() + " KICK " + channel + " " + nickname + " :" + message + "\r\n";
-	sendMessageToChannel(channel, msg);
-
-	if (kickfd > 0)
-		leaveChannel(channel, kickfd);
 }
 
 void Server::sendMessageToChannel(const std::string &channel, const std::string &msg, int fd, bool sendToSelf)
@@ -287,18 +225,20 @@ void Server::sendMessageToChannel(const std::string &channel, const std::string 
 	{
 		if (!sendToSelf && *it == fd)
 			continue;
-		if (send(*it, msg.c_str(), msg.size(), 0) < 0)
+		if (send(*it, msg.c_str(), msg.size(), 0) < 0) {
 			std::cerr << RED << "Failed to send message to client " << *it << RESET << std::endl;
-		else
+		} else {
 			std::cout << "Message sent to client " << *it << " : " << _clients[*it].getNickname() << std::endl;
+		}
 	}
 }
 
 void Server::handlePassword(const std::string &line, int fd)
 {
+	std::string msg;
 	if (_clients[fd].getIsRegistered())
 	{
-		std::string msg = ":" + _clients[fd].getHostname() + " 462 " + _clients[fd].getNickname() + " :You may not reregister\r\n";
+		msg = ":" + _clients[fd].getHostname() + " 462 " + _clients[fd].getNickname() + " :You may not reregister\r\n";
 		return (void)send(fd, msg.c_str(), msg.size(), 0);
 	}
 	std::string password(line.c_str() + 5);
@@ -308,20 +248,21 @@ void Server::handlePassword(const std::string &line, int fd)
 		registerClientAndSendWelcome(fd);
 	} else {
 		std::cerr << RED << "Incorrect password" << RESET << std::endl;
-		std::string msg = ":" + _clients[fd].getHostname() + " 464 " + _clients[fd].getNickname() + " :Password incorrect\r\n";
+		msg = ":" + _clients[fd].getHostname() + " 464 " + _clients[fd].getNickname() + " :Password incorrect\r\n";
 		send(fd, msg.c_str(), msg.size(), 0);
 	}
 }
 
 void Server::handleNickname(std::string &line, int fd)
 {
-    line.erase(std::remove(line.begin(), line.end(), '\r'), line.end());
+	line.erase(std::remove(line.begin(), line.end(), '\r'), line.end());
     line.erase(std::remove(line.begin(), line.end(), '\n'), line.end());
 
     std::string nickname = line.substr(line.find(' ') + 1);
+	std::string msg;
     if (nickname.empty())
     {
-        std::string msg = ":" + _clients[fd].getHostname() + " 431 ";
+        msg = ":" + _clients[fd].getHostname() + " 431 ";
         if (_clients[fd].getNickname().empty())
             msg += "*";
         else
@@ -333,7 +274,7 @@ void Server::handleNickname(std::string &line, int fd)
 
     if (nickname[0] == ':' || nickname[0] == '#')
     {
-        std::string msg = ":" + _clients[fd].getHostname() + " 432 ";
+        msg = ":" + _clients[fd].getHostname() + " 432 ";
         if (_clients[fd].getNickname().empty())
             msg += "*";
         else
@@ -348,7 +289,7 @@ void Server::handleNickname(std::string &line, int fd)
     {
         if (it->second.getNickname() == nickname && it->first != fd)
         {
-            std::string msg = ":" + _clients[fd].getHostname() + " 433 ";
+            msg = ":" + _clients[fd].getHostname() + " 433 ";
             if (_clients[fd].getNickname().empty())
                 msg += "*";
             else
@@ -363,17 +304,16 @@ void Server::handleNickname(std::string &line, int fd)
     if (_clients[fd].getIsRegistered() && !oldNickname.empty())
     {
         std::map<std::string, t_channel>::iterator channelIt;
+        std::string nickChangeMsg = ":" + oldNickname + "!" + _clients[fd].getUser() + "@" + _clients[fd].getHostname() + " NICK :" + nickname + "\r\n";
         for (channelIt = _channels.begin(); channelIt != _channels.end(); ++channelIt)
         {
             const std::string& channelName = channelIt->first;
             const t_channel& channelData = channelIt->second;
 
             if (channelData.members.find(fd) != channelData.members.end())
-            {
-                std::string nickChangeMsg = ":" + oldNickname + "!" + _clients[fd].getUser() + "@" + _clients[fd].getHostname() + " NICK :" + nickname + "\r\n";
                 sendMessageToChannel(channelName, nickChangeMsg);
-            }
         }
+		send(fd, nickChangeMsg.c_str(), nickChangeMsg.size(), 0);
     }
 
     _clients[fd].setNickname(nickname);
@@ -393,68 +333,6 @@ void Server::handleUser(const std::string &line, int fd)
 	_clients[fd].setUsername(username);
 	_clients[fd].setUser(user);
 	registerClientAndSendWelcome(fd);
-}
-
-void Server::handleJoinChannel(std::string &line, int fd)
-{
-	while (!line.empty() && (line[line.size() - 1] == '\n' || line[line.size() - 1] == '\r'))
-   		line.erase(line.size() - 1);
-
-	std::string channel = line.substr(5);
-	if (channel.empty())
-		return (void)send(fd, "You must specify a channel to join\n", 36, 0);
-	if (_channels.find(channel) == _channels.end()) {
-		_channels[channel] = t_channel();
-		_channels[channel].name = channel;
-		_channels[channel].members.insert(fd);
-		_channels[channel].operators.insert(fd);
-		_channels[channel].isInviteOnly = false;
-		_channels[channel].topic = ""; 
-		std::cout << "Channel " << channel << " created" << std::endl;
-	}
-	else {
-		_channels[channel].members.insert(fd);
-		std::cout << "Client " << fd << " joined channel " << channel << std::endl;
-		std::string msg = ":" + _clients[fd].getNickname() + "!" + _clients[fd].getUser() + "@" + _clients[fd].getHostname() + " JOIN " + channel + "\r\n";
-		sendMessageToChannel(channel, msg);
-		std::cout << "Here !" << std::endl;
-		std::string topicMsg = ":" + _clients[fd].getHostname() + " 331 " + _clients[fd].getNickname() + " " + channel + " :No topic is set\r\n";
-		if (!_channels[channel].topic.empty())
-			topicMsg = ":" + _clients[fd].getHostname() + " 332 " + _clients[fd].getNickname() + " " + channel + " :" + _channels[channel].topic + "\r\n";
-		std::cout << topicMsg << std::endl;
-		send(fd, topicMsg.c_str(), topicMsg.size(), 0);
-	}
-}
-
-void Server::handlePrivateMessage(const std::string &line, int fd)
-{
-	std::string info = line.substr(8);
-	if (info.empty())
-		return (void)send(fd, "You must specify a message to send\n", 36, 0);
-
-	std::string dest = info.substr(0, info.find(' '));
-	if (dest.empty())
-		return (void)send(fd, "You must specify a destination to send the message to\n", 51, 0);
-	if (dest[0] == '#' && _channels[dest].members.find(fd) == _channels[dest].members.end())
-		return (void)send(fd, "You are not a member of this channel\n", 37, 0);
-
-	std::string message = info.substr(info.find(':') + 1);
-	if (message.empty())
-		return (void)send(fd, "You must specify a message to send\n", 36, 0);
-
-	std::string msg = ":" + _clients[fd].getNickname() + "!" + _clients[fd].getUser() + "@" + _clients[fd].getHostname() + " PRIVMSG " + dest + " :" + message + "\r\n";
-	sendMessageToChannel(dest, msg, fd, false);
-	for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it)
-	{
-		if (it->second.getNickname() == dest && it->second.getIsRegistered())
-		{
-			if (send(it->first, msg.c_str(), msg.size(), 0) < 0)
-				std::cerr << RED << "Failed to send message to client " << it->first << RESET << std::endl;
-			else
-				std::cout << "Message sent to client " << it->first << std::endl;
-			break;
-		}
-	}
 }
 
 void Server::registerClientAndSendWelcome(int fd)
@@ -486,9 +364,8 @@ void Server::leaveChannel(const std::string &channel, int fd)
 	if (_channels[channel].members.empty()) {
 		_channels.erase(channel);
 		std::cout << "Channel " << channel << " deleted" << std::endl;
-	} else {
+	} else
 		std::cout << "Client " << fd << " left channel " << channel << std::endl;
-	}
 }
 
 void Server::deleteClient(int fd)

@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <iostream>
+#include <algorithm>
 
 class Client
 {
@@ -32,6 +33,8 @@ class Client
 		void setHostname(const std::string &hostname) { _hostname = hostname; }
 		void setRecvBuffer(const std::string &buffer) { recvBuffer = buffer; }
 
+        void addChannel(const std::string &channel) { _channels.push_back(channel); }
+        void removeChannel(const std::string &channel) { _channels.erase(std::remove(_channels.begin(), _channels.end(), channel), _channels.end());}
 
     private:
 

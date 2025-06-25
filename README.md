@@ -1,6 +1,3 @@
-- Faire commande manquante :
-	- MODE
-	- INVITE
+- Commandes operators:
+  + PING (bien le faire ?)
 - Trouver si on peut faire la diff entre client irssi et nc (pour pas afficher sion)
-- Envoyer bon message d'erreur (PASS, USER, NICK => Fait)
-- Le /leave et /kick qui ferme pas la fenetre irssi est trop random jl'ai regler comme j'ai pu

@@ -41,8 +41,7 @@ class Server
         //epoll
         void init(int port, const std::string &password);
         void run();
-        void shutdown();
-
+		void shutdown();
 
 		//Exceptions
 		class CreateSocketException : public std::exception
@@ -80,10 +79,13 @@ class Server
 		{
 			std::string name; // Channel name #channelname
 			std::string topic; // #channelname : channel topic
+            bool allTopic; // If the topic is set by the channel operator or not
 			std::set<int> members; // Set of client file descriptors (you can't have double with a set)
 			std::set<int> operators;
-			std::set<int> invitedUsers; // Users invited to the channel (en +i)
+			std::set<std::string> invitedUsers; // Users invited to the channel (en +i)
 			bool isInviteOnly; // If the channel is invite only
+            int limit; // Limit of users in the channel, -1 if no limit
+            std::string password; // Channel password, empty if no password
 		}			t_channel;
 
         int _epollFd;
@@ -100,13 +102,18 @@ class Server
 		void handleCommand(int clientFd);
 		void deleteClient(int clientFd);
 		void registerClientAndSendWelcome(int fd);
+		void removeChannel(const std::string &channelName);
 
-		void handlePrivateMessage(const std::string &line, int fd);
-		void handleJoinChannel(std::string &line, int fd);
-		void handlePassword(const std::string &line, int fd);
-		void handleNickname(std::string &line, int fd);
-		void handleUser(const std::string &line, int fd);
-		void handleKickClient(std::string &line, int fd);
-		void handleLeaveChannel(std::string &line, int fd);
-		void handleTopic(std::string &line, int fd);
+
+		void handlePrivateMessage(const std::string& line, int fd);
+		void handleJoinChannel(const std::string& line, int fd);
+		void handlePassword(const std::string& line, int fd);
+		void handleNickname(std::string& line, int fd);
+		void handleUser(const std::string& line, int fd);
+		void handleKickClient(std::string& line, int fd);
+		void handlePartChannel(const std::string& line, int fd);
+		void handleQuit(const std::string& line, int fd);
+		void handleTopic(std::string& line, int fd);
+		void handleInvite(std::string& line, int fd);
+        void handleMode(std::string& line, int fd);
 };
