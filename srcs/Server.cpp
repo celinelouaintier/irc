@@ -290,17 +290,16 @@ void Server::handleNickname(std::string &line, int fd)
     if (_clients[fd].getIsRegistered() && !oldNickname.empty())
     {
         std::map<std::string, t_channel>::iterator channelIt;
+        std::string nickChangeMsg = ":" + oldNickname + "!" + _clients[fd].getUser() + "@" + _clients[fd].getHostname() + " NICK :" + nickname + "\r\n";
         for (channelIt = _channels.begin(); channelIt != _channels.end(); ++channelIt)
         {
             const std::string& channelName = channelIt->first;
             const t_channel& channelData = channelIt->second;
 
             if (channelData.members.find(fd) != channelData.members.end())
-            {
-                std::string nickChangeMsg = ":" + oldNickname + "!" + _clients[fd].getUser() + "@" + _clients[fd].getHostname() + " NICK :" + nickname + "\r\n";
                 sendMessageToChannel(channelName, nickChangeMsg);
-            }
         }
+		send(fd, nickChangeMsg.c_str(), nickChangeMsg.size(), 0);
     }
 
     _clients[fd].setNickname(nickname);
