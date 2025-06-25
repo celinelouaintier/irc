@@ -196,7 +196,7 @@ void Server::handleJoinChannel(const std::string& line, int fd)
 	}
     if (!_channels[channel].password.empty() && pass != _channels[channel].password)
 	{
-		msg = ":" + _clients[fd].getHostname() + " 471 " + _clients[fd].getNickname() + " " + channel + " :Cannot join channel (+k)\r\n";
+		msg = ":" + _clients[fd].getHostname() + " 475 " + _clients[fd].getNickname() + " " + channel + " :Cannot join channel (+k)\r\n";
 		return (void)send(fd, msg.c_str(), msg.size(), 0);
 	}
 	else {
