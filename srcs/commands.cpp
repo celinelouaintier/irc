@@ -156,7 +156,7 @@ void Server::handlePrivateMessage(const std::string& line, int fd)
 void Server::handleJoinChannel(const std::string& line, int fd)
 {
 	std::string channel = line.substr(5);
-    std::string pass;
+	std::string pass;
 	std::string msg;
 	if (channel.empty())
 	{
@@ -164,11 +164,17 @@ void Server::handleJoinChannel(const std::string& line, int fd)
 		return (void)send(fd, msg.c_str(), msg.size(), 0);
 	}
 
-    if (channel.find(' ') != std::string::npos)
-    {
-        pass = channel.substr(channel.find(' ') + 1);
-        channel = channel.substr(0, channel.find(' '));
-    }
+	if (channel.find(' ') != std::string::npos)
+	{
+		pass = channel.substr(channel.find(' ') + 1);
+		channel = channel.substr(0, channel.find(' '));
+	}
+	
+	if (channel[0] != '#')
+	{
+		msg = ":" + _clients[fd].getHostname() + " 476 " + _clients[fd].getNickname() + " " + channel + " :Invalid channel name\r\n";
+		return (void)send(fd, msg.c_str(), msg.size(), 0);
+	}
 
 	if (_channels.find(channel) == _channels.end()) {
 		_channels[channel] = t_channel();
@@ -177,9 +183,9 @@ void Server::handleJoinChannel(const std::string& line, int fd)
 		_channels[channel].operators.insert(fd);
 		_channels[channel].isInviteOnly = false;
 		_channels[channel].topic = "";
-        _channels[channel].limit = -1;
-        _channels[channel].password = "";
-        _channels[channel].allTopic = false;
+		_channels[channel].limit = -1;
+		_channels[channel].password = "";
+		_channels[channel].allTopic = false;
 		std::cout << "Channel " << channel << " created" << std::endl;
 	}
 	else if (_channels[channel].isInviteOnly && _channels[channel].invitedUsers.find(_clients[fd].getNickname()) == _channels[channel].invitedUsers.end())
@@ -189,12 +195,12 @@ void Server::handleJoinChannel(const std::string& line, int fd)
 	}
 	else if (_channels[channel].members.find(fd) != _channels[channel].members.end())
 		return (void)send(fd, "You are already a member of this channel\n", 42, 0);
-    else if (_channels[channel].limit != -1 && (int)_channels[channel].members.size() >= _channels[channel].limit)
-    {
+	else if (_channels[channel].limit != -1 && (int)_channels[channel].members.size() >= _channels[channel].limit)
+	{
 		msg = ":" + _clients[fd].getHostname() + " 471 " + _clients[fd].getNickname() + " " + channel + " :Cannot join channel (+l)\r\n";
 		return (void)send(fd, msg.c_str(), msg.size(), 0);
 	}
-    if (!_channels[channel].password.empty() && pass != _channels[channel].password)
+	if (!_channels[channel].password.empty() && pass != _channels[channel].password)
 	{
 		msg = ":" + _clients[fd].getHostname() + " 475 " + _clients[fd].getNickname() + " " + channel + " :Cannot join channel (+k)\r\n";
 		return (void)send(fd, msg.c_str(), msg.size(), 0);
