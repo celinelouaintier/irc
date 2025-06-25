@@ -97,6 +97,7 @@ class Server
         std::string _password;
 		std::map<int, Client> _clients;
 		std::map<std::string, t_channel> _channels;
+		std::map<int, std::string> _buffers;
 
 
         // void stoi(const std::string &str, int &value) const;

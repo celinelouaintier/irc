@@ -145,7 +145,15 @@ void Server::handleCommand(int fd)
 	char buffer[1024];
 	ssize_t bytes = recv(fd, buffer, sizeof(buffer) - 1, 0);
 	std::string data(buffer, bytes);
-	std::stringstream ss(data);
+	
+	if (data.find("\r\n") == std::string::npos) {
+		_buffers[fd] += data; // Store the incomplete data for next time
+		return; // Wait for more data
+	}
+	std::string s = _buffers[fd];
+
+	_buffers.erase(fd);
+	std::stringstream ss(s);
 	std::string line;
 
 	while (std::getline(ss, line)) {
@@ -168,7 +176,7 @@ void Server::handleCommand(int fd)
 			std::cout << _clients[fd].getHostname().size() << std::endl;
 		}
 		else if (starts_with(line, "JOIN :"))
-			continue;
+			return;
 		else if (starts_with(line, "PASS "))
 			handlePassword(line, fd);
 		else if (starts_with(line, "NICK "))

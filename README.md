@@ -1,3 +1,4 @@
-- Commandes operators:
-  + PING (bien le faire ?)
-- Trouver si on peut faire la diff entre client irssi et nc (pour pas afficher sion)
+NC:
+- Verifier # au debut du channel apres JOIN
+- Regler le CTRL D
+- Renvoie "18:34 -!- nem: No such channel" a chaque connexion du client.
