@@ -525,8 +525,14 @@ void Server::handleMode(std::string &line, int fd)
 
 void Server::handleQuit(const std::string& line, int fd)
 {
+	if (line.size() > 4 && line[4] != ' ')
+		return;
+
 	Client& client = _clients[fd];
-	std::string msg = ":" + client.getNickname() + "!" + client.getUser() + "@" + client.getHostname() + " QUIT " + line.substr(5) + "\r\n";
+	std::string message = "";
+	if (line.size() > 5)
+		message = line.substr(5);
+	std::string msg = ":" + client.getNickname() + "!" + client.getUser() + "@" + client.getHostname() + " QUIT " + message + "\r\n";
 	for (std::map<std::string, t_channel>::iterator it = _channels.begin(); it != _channels.end(); )
 	{
 		if (it->second.members.find(fd) != it->second.members.end())
@@ -539,6 +545,7 @@ void Server::handleQuit(const std::string& line, int fd)
 		else
 			++it;
 	}
+	std::cout << "Client " << fd << " has quit the server" << std::endl;
 	deleteClient(fd);
 }
 

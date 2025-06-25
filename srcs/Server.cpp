@@ -200,7 +200,7 @@ void Server::handleCommand(int fd)
 			send (fd, "PONG\r\n", 6, 0);
 		else if (starts_with(line, "PART "))
 			handlePartChannel(line, fd);
-		else if (starts_with(line, "QUIT "))
+		else if (starts_with(line, "QUIT"))
 			handleQuit(line, fd);
 	}
 }
