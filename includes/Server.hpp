@@ -44,7 +44,6 @@ class Server
         //epoll
         void init(int port, const std::string &password);
         void run();
-        void shutdown();
 
 
 		//Exceptions

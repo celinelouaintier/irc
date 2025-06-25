@@ -88,7 +88,7 @@ void Server::run()
 		if (g_sig)
 		{
 			std::cerr << YELLOW << "\nSIGINT detected, servers shutting down..." << RESET << std::endl;
-			shutdown();
+			std::cout << GREEN << "Server shut down. Thank you for having chosen our service. Have a nice day~" << RESET << std::endl;
 			break;
 		}
 
@@ -103,17 +103,6 @@ void Server::run()
 				handleCommand(fd);
 		}
 	}
-}
-
-void Server::shutdown()
-{
-	std::map<int, Client>::iterator it = _clients.begin();
-	while (it != _clients.end())
-	{
-		deleteClient(it->first);
-		it++;
-	}
-	std::cout << GREEN << "Server shut down. Thank you for having chosen our service. Have a nice day~" << RESET << std::endl;
 }
 
 void Server::handleNewConnection()

@@ -434,6 +434,11 @@ void Server::handleMode(std::string &line, int fd)
             for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it)
                 if (it->second.getNickname() == arg && it->second.getIsRegistered())
                     targetFd = it->first;
+			if (targetFd == -1)
+			{
+				msg = ":" + _clients[fd].getHostname() + " 401 " + _clients[fd].getNickname() + " " + arg + " :No such nick\r\n";
+				return (void)send(fd, msg.c_str(), msg.size(), 0);
+			}
             if (add)
             {
                 if (_channels[channel].operators.find(targetFd) != _channels[channel].operators.end())
