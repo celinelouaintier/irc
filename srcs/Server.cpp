@@ -87,8 +87,8 @@ void Server::run()
 
 		if (g_sig)
 		{
-
 			std::cerr << YELLOW << "\nSIGINT detected, servers shutting down..." << RESET << std::endl;
+			shutdown();
 			break;
 		}
 
