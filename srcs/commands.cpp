@@ -389,6 +389,8 @@ void Server::handleMode(std::string &line, int fd)
 
 	if (_channels.find(channel) == _channels.end())
 	{
+		if (channel[0] != '#')
+			return ;
 		msg = ":" + _clients[fd].getHostname() + " 403 " + _clients[fd].getNickname() + " " + channel + " :No such channel\r\n";
 		return (void)send(fd, msg.c_str(), msg.size(), 0);
 	}
