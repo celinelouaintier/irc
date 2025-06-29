@@ -1,9 +1,10 @@
 #pragma once
 
-
 #include <iostream>
 #include <string>
 #include <cstring>
+#include <ctime>
+#include <cstdlib>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -41,12 +42,9 @@ class Server
 		Server(Server const &src);
 		Server &operator=(Server const &rhs);
 
-        //epoll
         void init(int port, const std::string &password);
         void run();
 
-
-		//Exceptions
 		class CreateSocketException : public std::exception
 		{
 			public:
@@ -99,8 +97,6 @@ class Server
 		std::map<std::string, t_channel> _channels;
 		std::map<int, std::string> _buffers;
 
-
-        // void stoi(const std::string &str, int &value) const;
 
         void sendMessageToChannel(const std::string &channel, const std::string &msg, int fd = -1, bool sendToSelf = true);
 		void leaveChannel(const std::string &channel, int fd);
