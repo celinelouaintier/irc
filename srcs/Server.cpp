@@ -59,15 +59,24 @@ void Server::init(int port, const std::string &password)
 	_serverAddr.sin_port = htons(port);
 
 	if (bind(_serverFd, (struct sockaddr *)&_serverAddr, sizeof(_serverAddr)) < 0)
+	{
+		close(_serverFd);
 		throw BindingSocketException();
+	}
 	std::cout << "Server started on port " << port << std::endl;
 	if (listen(_serverFd, 5) < 0) 
+	{
+		close(_serverFd);
 		throw listeningSocketException();
+	}
 	std::cout << "Waiting for connections..." << std::endl;
 
 	_epollFd = epoll_create1(0);
 	if (_epollFd == -1)
+	{
+		close(_serverFd);
 		throw CreateEpollException();
+	}
 }
 
 void Server::run()
@@ -103,6 +112,15 @@ void Server::run()
 				handleCommand(fd);
 		}
 	}
+}
+
+void Server::shutdown()
+{
+	close(_serverFd);
+	close(_epollFd);
+	std::map<int, Client>::iterator it;
+	for (it = _clients.begin(); it != _clients.end(); ++it)
+		close(it->first);
 }
 
 void Server::handleNewConnection()

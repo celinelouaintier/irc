@@ -44,6 +44,7 @@ class Server
 
         void init(int port, const std::string &password);
         void run();
+		void shutdown();
 
 		class CreateSocketException : public std::exception
 		{

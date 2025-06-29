@@ -78,21 +78,6 @@ void Server::handleKickClient(std::string& line, int fd)
 	}
 }
 
-static std::string getRandomCatMeme()
-{
-	static bool initialized = false;
-	if (!initialized) {
-		std::srand(std::time(NULL));
-		initialized = true;
-	}
-
-	int x = std::rand() % 13;
-	std::stringstream ss;
-	ss << x;
-	std::string path = "./cats/cat" + ss.str() + ".jpeg";
-	return path;
-}
-
 void Server::handlePrivateMessage(const std::string& line, int fd)
 {
 	std::string info = line.substr(8);
@@ -149,16 +134,28 @@ void Server::handlePrivateMessage(const std::string& line, int fd)
 
 	msg = ":" + _clients[fd].getNickname() + "!" + _clients[fd].getUser() + "@" + _clients[fd].getHostname() + " PRIVMSG " + dest + " :" + message + "\r\n";
 
-	if (dest[0] == '#' && message == "!cat") {
-		std::string memePath = getRandomCatMeme();
-		std::string memeMsg = ":" + _clients[fd].getNickname() + "!" + _clients[fd].getUser() + "@" + _clients[fd].getHostname()
-			+ " PRIVMSG " + dest + " :Here's a cat meme for you: " + memePath + "\r\n";
-		sendMessageToChannel(dest, memeMsg, fd, false);
-		return;
-	}
-
 	if (dest[0] == '#')
+	{
 		sendMessageToChannel(dest, msg, fd, false);
+		if (message == "!cat") {
+			std::string catQuotes[] = {
+				"Meow means “woof” in cat.",
+				"Cats sleep 70% of their lives.",
+				"If I fits, I sits.",
+				"I’m not lazy, I’m energy efficient.",
+				"Did you know? Cats have five toes on their front paws, but only four on the back!"
+			};
+			int nbQuotes = sizeof(catQuotes) / sizeof(catQuotes[0]);
+
+			std::srand(std::time(NULL));
+			std::string meme = catQuotes[std::rand() % nbQuotes];
+
+			std::string botMsg = ":meowbot!bot@localhost PRIVMSG " + dest + " :" + meme + "\r\n";
+			for (std::set<int>::iterator it = _channels[dest].members.begin(); it != _channels[dest].members.end(); ++it) {
+				send(*it, botMsg.c_str(), botMsg.size(), 0);
+			}
+		}
+	}
 	else 
 	{
 		for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it)
