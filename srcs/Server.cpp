@@ -141,6 +141,7 @@ void Server::handleNewConnection()
 		return;
 	}
 	_clients[clientFd] = Client(clientFd);
+	_clients[clientFd].setCorrectPassword(false);
 	std::cout << GREEN << "Client connected" << RESET << std::endl;
 }
 
@@ -350,7 +351,7 @@ void Server::handleUser(const std::string &line, int fd)
 
 void Server::registerClientAndSendWelcome(int fd)
 {
-	if (!_clients[fd].getNickname().empty() && !_clients[fd].getUsername().empty() && _clients[fd].getCorrectPassword() &&!_clients[fd].getIsRegistered())
+	if (!_clients[fd].getNickname().empty() && !_clients[fd].getUsername().empty() && _clients[fd].getCorrectPassword() && !_clients[fd].getIsRegistered())
 	{
 		_clients[fd].setIsRegistered(true);
 		std::cout << "Client " << fd << " registered" << std::endl;
