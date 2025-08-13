@@ -80,9 +80,9 @@ Puis :
 
 ## 👥 Contributeurs
 
-- [Naïm Ferrad](https://github.com/Nyn9)
 - [Céline Louaintier](https://github.com/celinelouaintier)
 - [Xiaoyun Xu](https://github.com/Roychrltt)
+- [Naïm Ferrad](https://github.com/Nyn9)
 
 ---
 
@@ -90,3 +90,4 @@ Puis :
 
 - Le projet respecte certaines limitations du sujet ft_irc de l’école 42.
 - Il est volontairement simplifié par rapport à un serveur IRC complet, mais fournit une base fonctionnelle solide pour comprendre les communications réseau, la gestion de multiples clients et le parsing d’un protocole texte.
+
